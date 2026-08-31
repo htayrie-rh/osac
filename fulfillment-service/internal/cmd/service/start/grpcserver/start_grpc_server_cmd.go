@@ -56,6 +56,7 @@ import (
 	"github.com/osac-project/osac/fulfillment-service/internal/recovery"
 	"github.com/osac-project/osac/fulfillment-service/internal/references"
 	"github.com/osac-project/osac/fulfillment-service/internal/servers"
+	"github.com/osac-project/osac/fulfillment-service/internal/services"
 	shtdwn "github.com/osac-project/osac/fulfillment-service/internal/shutdown"
 	"github.com/osac-project/osac/fulfillment-service/internal/validation"
 	"github.com/osac-project/osac/fulfillment-service/internal/vault"
@@ -189,6 +190,7 @@ func Cmd() *cobra.Command {
 	)
 	vault.AddBaseFlags(flags)
 	network.AddGrpcKeepaliveFlags(flags)
+	runner.args.services = services.RegisterFlags(flags)
 	return command
 }
 
@@ -208,16 +210,26 @@ type runnerContext struct {
 		tokenIssuer              string
 		emergencyServiceAccounts []string
 		vaultBase                vault.BaseConfig
+		services                 *services.Flags
 	}
 }
 
 // run runs the `start grpc-server` command.
 func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:gocyclo
+	// Apply service flag defaults and validate (before context creation to avoid cancel leak):
+	c.args.services.EnableAllIfNoneSet()
+	if err := c.args.services.Validate(); err != nil {
+		return fmt.Errorf("invalid service flags: %w", err)
+	}
+
 	// Get the context and create a cancellable version:
 	ctx, cancel := context.WithCancel(cmd.Context())
 
 	// Get the dependencies from the context:
 	c.logger = logging.LoggerFromContext(ctx)
+	c.logger.InfoContext(ctx, "Service enablement",
+		slog.Any("enabled", c.args.services.EnabledServices()),
+	)
 
 	// Configure the Kubernetes libraries to use the logger:
 	logrLogger := logr.FromSlogHandler(c.logger.Handler())

@@ -37,6 +37,7 @@ import (
 	"github.com/osac-project/osac/fulfillment-service/internal/logging"
 	"github.com/osac-project/osac/fulfillment-service/internal/network"
 	"github.com/osac-project/osac/fulfillment-service/internal/servers"
+	"github.com/osac-project/osac/fulfillment-service/internal/services"
 	shtdwn "github.com/osac-project/osac/fulfillment-service/internal/shutdown"
 	"github.com/osac-project/osac/fulfillment-service/internal/version"
 )
@@ -63,6 +64,7 @@ func Cmd() *cobra.Command {
 		[]string{},
 		caFileFlagHelp,
 	)
+	runner.args.services = services.RegisterFlags(flags)
 	return command
 }
 
@@ -75,16 +77,26 @@ type runnerContext struct {
 	args         struct {
 		caFiles   []string
 		tokenFile string
+		services  *services.Flags
 	}
 }
 
 // run runs the `start rest-gateway` command.
 func (c *runnerContext) run(cmd *cobra.Command, argv []string) error {
+	// Apply service flag defaults and validate (before context creation to avoid cancel leak):
+	c.args.services.EnableAllIfNoneSet()
+	if err := c.args.services.Validate(); err != nil {
+		return fmt.Errorf("invalid service flags: %w", err)
+	}
+
 	// Get the context:
 	ctx, cancel := context.WithCancel(cmd.Context())
 
 	// Get the dependencies from the context:
 	c.logger = logging.LoggerFromContext(ctx)
+	c.logger.InfoContext(ctx, "Service enablement",
+		slog.Any("enabled", c.args.services.EnabledServices()),
+	)
 
 	// Save the flags:
 	c.flags = cmd.Flags()
