@@ -72,6 +72,18 @@ spec:
         - --grpc-server-address=fulfillment-internal-api:8001
         - --grpc-keep-alive=5m
         - --metrics-listener-address=0.0.0.0:8002
+        {{- if .Values.services.caas.enabled }}
+        - --enable-caas
+        {{- end }}
+        {{- if .Values.services.vmaas.enabled }}
+        - --enable-vmaas
+        {{- end }}
+        {{- if .Values.services.bmaas.enabled }}
+        - --enable-bmaas
+        {{- end }}
+        {{- if .Values.services.maas.enabled }}
+        - --enable-maas
+        {{- end }}
         ports:
         - name: api
           containerPort: 8000

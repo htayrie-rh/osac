@@ -172,6 +172,18 @@ spec:
         - --token-encryption-crt=/etc/fulfillment-token-encryption/tls.crt
         - --token-issuer={{ include "fulfillment-api.tokenIssuerUrl" . }}
         - --metrics-listener-address=0.0.0.0:8002
+        {{- if .Values.services.caas.enabled }}
+        - --enable-caas
+        {{- end }}
+        {{- if .Values.services.vmaas.enabled }}
+        - --enable-vmaas
+        {{- end }}
+        {{- if .Values.services.bmaas.enabled }}
+        - --enable-bmaas
+        {{- end }}
+        {{- if .Values.services.maas.enabled }}
+        - --enable-maas
+        {{- end }}
         {{- if and .Values.vault.endpoint .Values.vault.credentials }}
         - --vault-endpoint={{ .Values.vault.endpoint }}
         - --vault-namespace={{ .Values.vault.namespace }}

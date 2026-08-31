@@ -225,5 +225,17 @@ vault:
   # Volume sources for the Keycloak client secret used for Vault authentication.
   credentials: []
 
+# Service tier enablement flags. When all are true (the default), OSAC operates as a full-stack cloud.
+# The umbrella chart overrides these via the service.services values path.
+services:
+  caas:
+    enabled: true
+  vmaas:
+    enabled: true
+  bmaas:
+    enabled: true
+  maas:
+    enabled: true
+
 consoleProxy:
   disabled: false
