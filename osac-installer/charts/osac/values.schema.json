@@ -265,18 +265,8 @@
         },
         "controllers": {
           "type": "object",
-          "description": "Enable or disable individual operator controllers",
+          "description": "Enable or disable shared-infrastructure operator controllers (service-tier controllers are driven by operator.services.*)",
           "properties": {
-            "clusterOrder": {
-              "type": "boolean",
-              "description": "Enable ClusterOrder controller",
-              "default": true
-            },
-            "computeInstance": {
-              "type": "boolean",
-              "description": "Enable ComputeInstance controller",
-              "default": true
-            },
             "tenant": {
               "type": "boolean",
               "description": "Enable Tenant controller",
@@ -290,11 +280,6 @@
             "networkingProvisioning": {
               "type": "boolean",
               "description": "Dispatch AAP jobs to provision networking resources. Set false for Kind dev (no fabric): controllers reconcile VirtualNetwork/Subnet/SecurityGroup to READY without provisioning.",
-              "default": true
-            },
-            "bareMetalInstance": {
-              "type": "boolean",
-              "description": "Enable BareMetalInstance controller",
               "default": true
             },
             "storage": {

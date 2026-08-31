@@ -78,11 +78,8 @@ operator:
     bmaas:
       enabled: true
   controllers:
-    clusterOrder: true
-    computeInstance: true
     tenant: true
     networking: true
-    bareMetalInstance: true
     storage: true
   configSecret:
     name: "osac-config"
