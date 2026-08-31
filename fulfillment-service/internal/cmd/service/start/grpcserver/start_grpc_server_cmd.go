@@ -512,6 +512,14 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		return fmt.Errorf("failed to read gRPC keepalive configuration: %w", err)
 	}
 
+	// Create the disabled-service request counter and unknown service handler:
+	disabledServiceCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "fulfillment_disabled_service_requests_total",
+		Help: "Total requests to disabled services.",
+	}, []string{"service", "method"})
+	metricsRegisterer.MustRegister(disabledServiceCounter)
+	unknownHandler := NewUnknownServiceHandler(c.args.services, disabledServiceCounter)
+
 	// Create the gRPC server:
 	c.logger.InfoContext(ctx, "Creating gRPC server")
 	grpcServer := grpc.NewServer(
@@ -523,6 +531,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 			MinTime:             keepaliveConfig.MinTime,
 			PermitWithoutStream: true,
 		}),
+		grpc.UnknownServiceHandler(unknownHandler),
 		grpc.ChainUnaryInterceptor(
 			panicInterceptor.UnaryServer,
 			metricsInterceptor.UnaryServer,
