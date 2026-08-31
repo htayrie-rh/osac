@@ -692,6 +692,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		SecretStore:             secretStore,
 		TierResolver:            tierResolver,
 		PrivateUsersServer:      privateUsersServer,
+		Services:                c.args.services,
 	})
 	if err != nil {
 		return err
@@ -728,40 +729,42 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	// filterable-resource-exempt: singleton JWKS fetch, no List RPC or CEL filter field
 	publicv1.RegisterJsonWebKeySetServer(grpcServer, jsonWebKeySetServer)
 
-	// Build the console target resolver (lookup/policy only):
-	hubLookup := servers.NewPrivateServerHubLookup(privateHubsServer, privateSecretsServer)
-	consoleResolver, err := servers.NewConsoleTargetResolver().
-		SetLogger(c.logger).
-		SetComputeInstanceLookup(servers.NewPrivateServerCILookup(privateComputeInstancesServer)).
-		SetHubLookup(hubLookup).
-		SetHubClientFactory(servers.NewDefaultHubClientFactory(hubScheme)).
-		Build()
-	if err != nil {
-		return fmt.Errorf("failed to create console target resolver: %w", err)
-	}
+	if c.args.services.VMaaS {
+		// Build the console target resolver (lookup/policy only):
+		hubLookup := servers.NewPrivateServerHubLookup(privateHubsServer, privateSecretsServer)
+		consoleResolver, err := servers.NewConsoleTargetResolver().
+			SetLogger(c.logger).
+			SetComputeInstanceLookup(servers.NewPrivateServerCILookup(privateComputeInstancesServer)).
+			SetHubLookup(hubLookup).
+			SetHubClientFactory(servers.NewDefaultHubClientFactory(hubScheme)).
+			Build()
+		if err != nil {
+			return fmt.Errorf("failed to create console target resolver: %w", err)
+		}
 
-	// Build the console session service (orchestration):
-	sessionService, err := console.NewSessionService().
-		SetLogger(c.logger).
-		SetResolver(consoleResolver).
-		SetSealer(ticketSealer).
-		Build()
-	if err != nil {
-		return fmt.Errorf("failed to create console session service: %w", err)
-	}
+		// Build the console session service (orchestration):
+		sessionService, err := console.NewSessionService().
+			SetLogger(c.logger).
+			SetResolver(consoleResolver).
+			SetSealer(ticketSealer).
+			Build()
+		if err != nil {
+			return fmt.Errorf("failed to create console session service: %w", err)
+		}
 
-	// Create the console sessions server (thin adapter):
-	c.logger.InfoContext(ctx, "Creating console server")
-	consoleServer, err := servers.NewConsoleServer().
-		SetLogger(c.logger).
-		SetSessionService(sessionService).
-		Build()
-	if err != nil {
-		return fmt.Errorf("failed to create console server: %w", err)
+		// Create the console sessions server (thin adapter):
+		c.logger.InfoContext(ctx, "Creating console server")
+		consoleServer, err := servers.NewConsoleServer().
+			SetLogger(c.logger).
+			SetSessionService(sessionService).
+			Build()
+		if err != nil {
+			return fmt.Errorf("failed to create console server: %w", err)
+		}
+		// filterable-resource-exempt: session/action RPC, no List RPC or CEL filter field; also depends on
+		// privateHubsServer/privateComputeInstancesServer from RegisterResourceServers, so it must be built after
+		publicv1.RegisterConsoleSessionsServer(grpcServer, consoleServer)
 	}
-	// filterable-resource-exempt: session/action RPC, no List RPC or CEL filter field; also depends on
-	// privateHubsServer/privateComputeInstancesServer from RegisterResourceServers, so it must be built after
-	publicv1.RegisterConsoleSessionsServer(grpcServer, consoleServer)
 
 	// Create the events server:
 	c.logger.InfoContext(ctx, "Creating events server")
