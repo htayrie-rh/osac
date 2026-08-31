@@ -217,6 +217,42 @@
             }
           }
         },
+        "services": {
+          "type": "object",
+          "description": "Service tier enablement flags passed to the operator",
+          "properties": {
+            "caas": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable CaaS tier (gates Cluster controller)",
+                  "default": true
+                }
+              }
+            },
+            "vmaas": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable VMaaS tier (gates ComputeInstance controller)",
+                  "default": true
+                }
+              }
+            },
+            "bmaas": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable BMaaS tier (gates BareMetalInstance controller)",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
         "controllers": {
           "type": "object",
           "description": "Enable or disable individual operator controllers",
@@ -1854,6 +1890,35 @@
                     "const": true
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "services": {
+            "properties": {
+              "bmaas": {
+                "properties": {
+                  "enabled": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": ["services"]
+      },
+      "then": {
+        "properties": {
+          "bmf": {
+            "properties": {
+              "enabled": {
+                "const": false
               }
             }
           }
