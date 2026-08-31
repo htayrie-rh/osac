@@ -16,9 +16,12 @@ operator:
   fulfillment:
     serverAddress: "fulfillment-internal-api:8001"
     tokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  services:
+    caas:
+      enabled: true
+    vmaas:
+      enabled: true
   controllers:
-    clusterOrder: true
-    computeInstance: true
     tenant: true
     networking: true
 
