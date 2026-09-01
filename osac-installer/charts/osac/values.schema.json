@@ -41,51 +41,57 @@
         }
       }
     },
-    "services": {
+    "global": {
       "type": "object",
-      "description": "Service tier enablement flags. Controls which tiers are active across all OSAC components.",
+      "description": "Global values propagated to all subcharts via Helm's built-in global mechanism",
       "properties": {
-        "caas": {
+        "services": {
           "type": "object",
-          "description": "Container-as-a-Service (managed Kubernetes clusters)",
+          "description": "Service tier enablement flags. Controls which tiers are active across all OSAC components.",
           "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable CaaS tier (ClusterOrders, ClusterTemplates, ClusterCatalogItems, ClusterVersions)",
-              "default": true
-            }
-          }
-        },
-        "vmaas": {
-          "type": "object",
-          "description": "Virtual-Machine-as-a-Service (KubeVirt compute instances)",
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable VMaaS tier (ComputeInstances, DiskImages, InstanceTypes, Volumes, ConsoleSessions)",
-              "default": true
-            }
-          }
-        },
-        "bmaas": {
-          "type": "object",
-          "description": "Bare-Metal-as-a-Service (bare metal host provisioning)",
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable BMaaS tier (BareMetalInstances, BareMetalInstanceTypes)",
-              "default": true
-            }
-          }
-        },
-        "maas": {
-          "type": "object",
-          "description": "Metal-as-a-Service (raw metal access)",
-          "properties": {
-            "enabled": {
-              "type": "boolean",
-              "description": "Enable MaaS tier",
-              "default": true
+            "caas": {
+              "type": "object",
+              "description": "Container-as-a-Service (managed Kubernetes clusters)",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable CaaS tier (ClusterOrders, ClusterTemplates, ClusterCatalogItems, ClusterVersions)",
+                  "default": true
+                }
+              }
+            },
+            "vmaas": {
+              "type": "object",
+              "description": "Virtual-Machine-as-a-Service (KubeVirt compute instances)",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable VMaaS tier (ComputeInstances, DiskImages, InstanceTypes, Volumes, ConsoleSessions)",
+                  "default": true
+                }
+              }
+            },
+            "bmaas": {
+              "type": "object",
+              "description": "Bare-Metal-as-a-Service (bare metal host provisioning)",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable BMaaS tier (BareMetalInstances, BareMetalInstanceTypes)",
+                  "default": true
+                }
+              }
+            },
+            "maas": {
+              "type": "object",
+              "description": "Metal-as-a-Service (raw metal access)",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Enable MaaS tier",
+                  "default": true
+                }
+              }
             }
           }
         }
@@ -217,45 +223,9 @@
             }
           }
         },
-        "services": {
-          "type": "object",
-          "description": "Service tier enablement flags passed to the operator",
-          "properties": {
-            "caas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable CaaS tier (gates Cluster controller)",
-                  "default": true
-                }
-              }
-            },
-            "vmaas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable VMaaS tier (gates ComputeInstance controller)",
-                  "default": true
-                }
-              }
-            },
-            "bmaas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable BMaaS tier (gates BareMetalInstance controller)",
-                  "default": true
-                }
-              }
-            }
-          }
-        },
         "controllers": {
           "type": "object",
-          "description": "Enable or disable shared-infrastructure operator controllers (service-tier controllers are driven by operator.services.*)",
+          "description": "Enable or disable shared-infrastructure operator controllers (service-tier controllers are driven by global.services.*)",
           "properties": {
             "tenant": {
               "type": "boolean",
@@ -512,52 +482,6 @@
             "credentials": {
               "type": "array",
               "description": "Volume sources for the Keycloak client secret used for Vault authentication"
-            }
-          }
-        },
-        "services": {
-          "type": "object",
-          "description": "Service tier enablement flags passed to the fulfillment-service",
-          "properties": {
-            "caas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable CaaS tier",
-                  "default": true
-                }
-              }
-            },
-            "vmaas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable VMaaS tier",
-                  "default": true
-                }
-              }
-            },
-            "bmaas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable BMaaS tier",
-                  "default": true
-                }
-              }
-            },
-            "maas": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable MaaS tier",
-                  "default": true
-                }
-              }
             }
           }
         }
@@ -1801,12 +1725,16 @@
     {
       "if": {
         "properties": {
-          "services": {
+          "global": {
             "properties": {
-              "caas": {
+              "services": {
                 "properties": {
-                  "enabled": {
-                    "const": true
+                  "caas": {
+                    "properties": {
+                      "enabled": {
+                        "const": true
+                      }
+                    }
                   }
                 }
               }
@@ -1818,12 +1746,16 @@
         "anyOf": [
           {
             "properties": {
-              "services": {
+              "global": {
                 "properties": {
-                  "vmaas": {
+                  "services": {
                     "properties": {
-                      "enabled": {
-                        "const": true
+                      "vmaas": {
+                        "properties": {
+                          "enabled": {
+                            "const": true
+                          }
+                        }
                       }
                     }
                   }
@@ -1833,12 +1765,16 @@
           },
           {
             "properties": {
-              "services": {
+              "global": {
                 "properties": {
-                  "bmaas": {
+                  "services": {
                     "properties": {
-                      "enabled": {
-                        "const": true
+                      "bmaas": {
+                        "properties": {
+                          "enabled": {
+                            "const": true
+                          }
+                        }
                       }
                     }
                   }
@@ -1852,12 +1788,16 @@
     {
       "if": {
         "properties": {
-          "services": {
+          "global": {
             "properties": {
-              "maas": {
+              "services": {
                 "properties": {
-                  "enabled": {
-                    "const": true
+                  "maas": {
+                    "properties": {
+                      "enabled": {
+                        "const": true
+                      }
+                    }
                   }
                 }
               }
@@ -1867,12 +1807,16 @@
       },
       "then": {
         "properties": {
-          "services": {
+          "global": {
             "properties": {
-              "caas": {
+              "services": {
                 "properties": {
-                  "enabled": {
-                    "const": true
+                  "caas": {
+                    "properties": {
+                      "enabled": {
+                        "const": true
+                      }
+                    }
                   }
                 }
               }
@@ -1884,19 +1828,23 @@
     {
       "if": {
         "properties": {
-          "services": {
+          "global": {
             "properties": {
-              "bmaas": {
+              "services": {
                 "properties": {
-                  "enabled": {
-                    "const": false
+                  "bmaas": {
+                    "properties": {
+                      "enabled": {
+                        "const": false
+                      }
+                    }
                   }
                 }
               }
             }
           }
         },
-        "required": ["services"]
+        "required": ["global"]
       },
       "then": {
         "properties": {

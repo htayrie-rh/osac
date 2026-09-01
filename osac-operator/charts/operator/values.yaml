@@ -44,14 +44,6 @@ controllers:
 #     vast: vast-csi-controller.osac-csi-backends.svc:50051
 vendorControllers: {}
 
-services:
-  caas:
-    enabled: true
-  vmaas:
-    enabled: true
-  bmaas:
-    enabled: true
-
 configSecret:
   name: "osac-config"
   optional: true
