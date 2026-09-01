@@ -1,5 +1,15 @@
 # VMaaS CI environment -- instance values for osac chart.
 
+# --- Service Enablement ---
+global:
+  services:
+    caas:
+      enabled: false
+    vmaas:
+      enabled: true
+    maas:
+      enabled: false
+
 # --- CSI Driver ---
 csiDriver:
   enabled: true
@@ -20,11 +30,6 @@ operator:
   fulfillment:
     serverAddress: "fulfillment-internal-api:8001"
     tokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
-  services:
-    caas:
-      enabled: false
-    vmaas:
-      enabled: true
   controllers:
     tenant: true
     networking: true

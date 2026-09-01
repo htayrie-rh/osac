@@ -72,16 +72,16 @@ spec:
         - --grpc-server-address=fulfillment-internal-api:8001
         - --grpc-keep-alive=5m
         - --metrics-listener-address=0.0.0.0:8002
-        {{- if .Values.services.caas.enabled }}
+        {{- if include "fulfillment-service.serviceEnabled" (list . "caas") }}
         - --enable-caas
         {{- end }}
-        {{- if .Values.services.vmaas.enabled }}
+        {{- if include "fulfillment-service.serviceEnabled" (list . "vmaas") }}
         - --enable-vmaas
         {{- end }}
-        {{- if .Values.services.bmaas.enabled }}
+        {{- if include "fulfillment-service.serviceEnabled" (list . "bmaas") }}
         - --enable-bmaas
         {{- end }}
-        {{- if .Values.services.maas.enabled }}
+        {{- if include "fulfillment-service.serviceEnabled" (list . "maas") }}
         - --enable-maas
         {{- end }}
         ports:

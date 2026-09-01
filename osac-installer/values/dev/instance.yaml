@@ -1,5 +1,13 @@
 # OpenShift dev environment -- instance values for osac chart.
 
+# --- Service Enablement ---
+global:
+  services:
+    caas:
+      enabled: true
+    vmaas:
+      enabled: true
+
 # --- Operator ---
 operator:
   image:
@@ -16,11 +24,6 @@ operator:
   fulfillment:
     serverAddress: "fulfillment-internal-api:8001"
     tokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
-  services:
-    caas:
-      enabled: true
-    vmaas:
-      enabled: true
   controllers:
     tenant: true
     networking: true
