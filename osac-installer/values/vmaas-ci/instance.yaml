@@ -173,10 +173,6 @@ aap:
 validation:
   enabled: true
 
-# --- Bare Metal Fulfillment Operator ---
-bmf:
-  enabled: false
-
 # --- Hub Access ---
 hubAccess:
   enabled: true

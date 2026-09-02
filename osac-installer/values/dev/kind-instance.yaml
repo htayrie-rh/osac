@@ -127,7 +127,6 @@ aap:
 
 # --- Bare Metal Fulfillment (disabled) ---
 bmf:
-  enabled: false
   secrets:
     inventoryConfig: osac-inventory-config-metal3-test
     managementConfig: osac-management-config-metal3-test
