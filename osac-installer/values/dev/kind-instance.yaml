@@ -8,7 +8,7 @@ global:
     vmaas:
       enabled: true
     bmaas:
-      enabled: false
+      enabled: true
     maas:
       enabled: false
 
@@ -127,8 +127,9 @@ aap:
     publishTemplates:
       enabled: false
 
-# --- Bare Metal Fulfillment (disabled) ---
+# --- Bare Metal Fulfillment (no Metal3 in Kind — deploy chart but 0 replicas) ---
 bmf:
+  replicaCount: 0
   secrets:
     inventoryConfig: osac-inventory-config-metal3-test
     managementConfig: osac-management-config-metal3-test
