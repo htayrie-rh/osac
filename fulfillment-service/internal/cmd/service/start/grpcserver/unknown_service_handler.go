@@ -98,7 +98,7 @@ func NewUnknownServiceHandler(
 
 		for prefix, group := range disabledMap {
 			if strings.HasPrefix(method, prefix) {
-				counter.WithLabelValues(group, method).Inc()
+				counter.WithLabelValues(group).Inc()
 				return status.Errorf(
 					codes.Unavailable,
 					"the %s service is not enabled on this server",

@@ -32,7 +32,7 @@ import (
 func newTestCounter(reg *prometheus.Registry) *prometheus.CounterVec {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fulfillment_disabled_service_requests_total",
-	}, []string{"service", "method"})
+	}, []string{"service"})
 	reg.MustRegister(counter)
 	return counter
 }
@@ -120,9 +120,8 @@ var _ = Describe("UnknownServiceHandler", func() {
 		_ = invokeMethod(conn, "/osac.public.v1.Clusters/Get")
 		_ = invokeMethod(conn, "/osac.private.v1.BareMetalInstances/List")
 
-		Expect(getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/List")).To(Equal(1.0))
-		Expect(getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/Get")).To(Equal(1.0))
-		Expect(getCounterValue(counter, "BMaaS", "/osac.private.v1.BareMetalInstances/List")).To(Equal(1.0))
+		Expect(getCounterValue(counter, "CaaS")).To(Equal(2.0))
+		Expect(getCounterValue(counter, "BMaaS")).To(Equal(1.0))
 	})
 
 	It("returns Unimplemented for an enabled but not registered service", func() {
