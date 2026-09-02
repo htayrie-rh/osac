@@ -7,6 +7,10 @@ global:
       enabled: true
     vmaas:
       enabled: false
+    bmaas:
+      enabled: true
+    maas:
+      enabled: false
 
 # --- Operator ---
 operator:

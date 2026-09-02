@@ -9,6 +9,8 @@ global:
       enabled: true
     bmaas:
       enabled: true
+    maas:
+      enabled: true
 
 # --- Operator ---
 operator:
