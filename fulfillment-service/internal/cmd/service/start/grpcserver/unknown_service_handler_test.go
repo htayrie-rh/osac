@@ -16,8 +16,9 @@ package grpcserver
 import (
 	"context"
 	"net"
-	"testing"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
@@ -36,25 +37,24 @@ func newTestCounter(reg *prometheus.Registry) *prometheus.CounterVec {
 	return counter
 }
 
-func startTestServer(t *testing.T, handler grpc.StreamHandler) *grpc.ClientConn {
-	t.Helper()
+func startTestServer(handler grpc.StreamHandler) (*grpc.ClientConn, func()) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
-	}
+	Expect(err).ToNot(HaveOccurred())
+
 	srv := grpc.NewServer(grpc.UnknownServiceHandler(handler))
-	t.Cleanup(srv.Stop)
 	go func() { _ = srv.Serve(lis) }()
 
 	conn, err := grpc.NewClient(
 		lis.Addr().String(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+	Expect(err).ToNot(HaveOccurred())
+
+	cleanup := func() {
+		conn.Close()
+		srv.Stop()
 	}
-	t.Cleanup(func() { conn.Close() })
-	return conn
+	return conn, cleanup
 }
 
 func invokeMethod(conn *grpc.ClientConn, fullMethod string) error {
@@ -74,122 +74,94 @@ func getCounterValue(counter *prometheus.CounterVec, labels ...string) float64 {
 	return *m.Counter.Value
 }
 
-func TestUnknownServiceHandler_DisabledService(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	counter := newTestCounter(reg)
-	flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
-	handler := NewUnknownServiceHandler(flags, counter)
-	conn := startTestServer(t, handler)
+var _ = Describe("UnknownServiceHandler", func() {
+	It("returns Unavailable for a disabled service", func() {
+		reg := prometheus.NewRegistry()
+		counter := newTestCounter(reg)
+		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
+		handler := NewUnknownServiceHandler(flags, counter)
+		conn, cleanup := startTestServer(handler)
+		DeferCleanup(cleanup)
 
-	err := invokeMethod(conn, "/osac.public.v1.Clusters/List")
-	if err == nil {
-		t.Fatal("expected error for disabled CaaS service")
-	}
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected gRPC status error, got: %v", err)
-	}
-	if st.Code() != codes.Unavailable {
-		t.Errorf("expected Unavailable, got %v", st.Code())
-	}
-	if got := st.Message(); got != "the CaaS service is not enabled on this server" {
-		t.Errorf("unexpected message: %s", got)
-	}
-}
+		err := invokeMethod(conn, "/osac.public.v1.Clusters/List")
+		Expect(err).To(HaveOccurred())
 
-func TestUnknownServiceHandler_UnknownService(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	counter := newTestCounter(reg)
-	flags := &services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true}
-	handler := NewUnknownServiceHandler(flags, counter)
-	conn := startTestServer(t, handler)
-
-	err := invokeMethod(conn, "/osac.public.v1.NonExistent/Get")
-	if err == nil {
-		t.Fatal("expected error for unknown service")
-	}
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected gRPC status error, got: %v", err)
-	}
-	if st.Code() != codes.Unimplemented {
-		t.Errorf("expected Unimplemented, got %v", st.Code())
-	}
-}
-
-func TestUnknownServiceHandler_PrometheusCounter(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	counter := newTestCounter(reg)
-	flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: false, MaaS: false}
-	handler := NewUnknownServiceHandler(flags, counter)
-	conn := startTestServer(t, handler)
-
-	_ = invokeMethod(conn, "/osac.public.v1.Clusters/List")
-	_ = invokeMethod(conn, "/osac.public.v1.Clusters/Get")
-	_ = invokeMethod(conn, "/osac.private.v1.BareMetalInstances/List")
-
-	caasCount := getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/List")
-	if caasCount != 1 {
-		t.Errorf("expected CaaS List counter = 1, got %v", caasCount)
-	}
-	caasGetCount := getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/Get")
-	if caasGetCount != 1 {
-		t.Errorf("expected CaaS Get counter = 1, got %v", caasGetCount)
-	}
-	bmaasCount := getCounterValue(counter, "BMaaS", "/osac.private.v1.BareMetalInstances/List")
-	if bmaasCount != 1 {
-		t.Errorf("expected BMaaS counter = 1, got %v", bmaasCount)
-	}
-}
-
-func TestUnknownServiceHandler_EnabledServiceNotBlocked(t *testing.T) {
-	reg := prometheus.NewRegistry()
-	counter := newTestCounter(reg)
-	flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
-	handler := NewUnknownServiceHandler(flags, counter)
-	conn := startTestServer(t, handler)
-
-	err := invokeMethod(conn, "/osac.public.v1.ComputeInstances/List")
-	if err == nil {
-		t.Fatal("expected error (service not actually registered)")
-	}
-	st, ok := status.FromError(err)
-	if !ok {
-		t.Fatalf("expected gRPC status error, got: %v", err)
-	}
-	if st.Code() != codes.Unimplemented {
-		t.Errorf("expected Unimplemented for enabled-but-not-registered service, got %v", st.Code())
-	}
-}
-
-func TestBuildDisabledServiceMap(t *testing.T) {
-	t.Run("all enabled means empty map", func(t *testing.T) {
-		m := buildDisabledServiceMap(&services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true})
-		if len(m) != 0 {
-			t.Errorf("expected empty map, got %d entries", len(m))
-		}
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unavailable))
+		Expect(st.Message()).To(Equal("the CaaS service is not enabled on this server"))
 	})
 
-	t.Run("all disabled populates all prefixes", func(t *testing.T) {
+	It("returns Unimplemented for an unknown service", func() {
+		reg := prometheus.NewRegistry()
+		counter := newTestCounter(reg)
+		flags := &services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true}
+		handler := NewUnknownServiceHandler(flags, counter)
+		conn, cleanup := startTestServer(handler)
+		DeferCleanup(cleanup)
+
+		err := invokeMethod(conn, "/osac.public.v1.NonExistent/Get")
+		Expect(err).To(HaveOccurred())
+
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unimplemented))
+	})
+
+	It("increments the Prometheus counter for disabled services", func() {
+		reg := prometheus.NewRegistry()
+		counter := newTestCounter(reg)
+		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: false, MaaS: false}
+		handler := NewUnknownServiceHandler(flags, counter)
+		conn, cleanup := startTestServer(handler)
+		DeferCleanup(cleanup)
+
+		_ = invokeMethod(conn, "/osac.public.v1.Clusters/List")
+		_ = invokeMethod(conn, "/osac.public.v1.Clusters/Get")
+		_ = invokeMethod(conn, "/osac.private.v1.BareMetalInstances/List")
+
+		Expect(getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/List")).To(Equal(1.0))
+		Expect(getCounterValue(counter, "CaaS", "/osac.public.v1.Clusters/Get")).To(Equal(1.0))
+		Expect(getCounterValue(counter, "BMaaS", "/osac.private.v1.BareMetalInstances/List")).To(Equal(1.0))
+	})
+
+	It("returns Unimplemented for an enabled but not registered service", func() {
+		reg := prometheus.NewRegistry()
+		counter := newTestCounter(reg)
+		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
+		handler := NewUnknownServiceHandler(flags, counter)
+		conn, cleanup := startTestServer(handler)
+		DeferCleanup(cleanup)
+
+		err := invokeMethod(conn, "/osac.public.v1.ComputeInstances/List")
+		Expect(err).To(HaveOccurred())
+
+		st, ok := status.FromError(err)
+		Expect(ok).To(BeTrue())
+		Expect(st.Code()).To(Equal(codes.Unimplemented))
+	})
+})
+
+var _ = Describe("buildDisabledServiceMap", func() {
+	It("returns an empty map when all services are enabled", func() {
+		m := buildDisabledServiceMap(&services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true})
+		Expect(m).To(BeEmpty())
+	})
+
+	It("populates all prefixes when all services are disabled", func() {
 		m := buildDisabledServiceMap(&services.Flags{CaaS: false, VMaaS: false, BMaaS: false, MaaS: false})
 		totalPrefixes := 0
 		for _, prefixes := range disabledServicePrefixes {
 			totalPrefixes += len(prefixes)
 		}
-		if len(m) != totalPrefixes {
-			t.Errorf("expected %d entries, got %d", totalPrefixes, len(m))
-		}
+		Expect(m).To(HaveLen(totalPrefixes))
 	})
 
-	t.Run("partial disable only includes disabled groups", func(t *testing.T) {
+	It("only includes disabled groups for partial disable", func() {
 		m := buildDisabledServiceMap(&services.Flags{CaaS: true, VMaaS: false, BMaaS: true, MaaS: false})
 		for prefix := range m {
-			if group := m[prefix]; group != "VMaaS" {
-				t.Errorf("expected only VMaaS in disabled map, got %s for %s", group, prefix)
-			}
+			Expect(m[prefix]).To(Equal("VMaaS"))
 		}
-		if len(m) != len(disabledServicePrefixes["VMaaS"]) {
-			t.Errorf("expected %d VMaaS entries, got %d", len(disabledServicePrefixes["VMaaS"]), len(m))
-		}
+		Expect(m).To(HaveLen(len(disabledServicePrefixes["VMaaS"])))
 	})
-}
+})
