@@ -26,6 +26,9 @@ import (
 func handlerName(h handlerRegistrar) string {
 	name := runtime.FuncForPC(reflect.ValueOf(h).Pointer()).Name()
 	if idx := strings.LastIndex(name, "/"); idx >= 0 {
+		if prev := strings.LastIndex(name[:idx], "/"); prev >= 0 {
+			idx = prev
+		}
 		name = name[idx+1:]
 	}
 	return name
@@ -68,41 +71,65 @@ func containsNone(names []string, excluded []string) []string {
 }
 
 var caasHandlers = []string{
-	"v1.RegisterClusterTemplatesHandler",
-	"v1.RegisterClusterCatalogItemsHandler",
-	"v1.RegisterClustersHandler",
-	"v1.RegisterClusterVersionsHandler",
+	"public/v1.RegisterClusterTemplatesHandler",
+	"public/v1.RegisterClusterCatalogItemsHandler",
+	"public/v1.RegisterClustersHandler",
+	"public/v1.RegisterClusterVersionsHandler",
+	"private/v1.RegisterClusterTemplatesHandler",
+	"private/v1.RegisterClusterCatalogItemsHandler",
+	"private/v1.RegisterClustersHandler",
+	"private/v1.RegisterClusterVersionsHandler",
 }
 
 var vmaasHandlers = []string{
-	"v1.RegisterComputeInstanceTemplatesHandler",
-	"v1.RegisterComputeInstanceCatalogItemsHandler",
-	"v1.RegisterComputeInstancesHandler",
-	"v1.RegisterDiskImagesHandler",
-	"v1.RegisterConsoleSessionsHandler",
-	"v1.RegisterInstanceTypesHandler",
-	"v1.RegisterVolumesHandler",
+	"public/v1.RegisterComputeInstanceTemplatesHandler",
+	"public/v1.RegisterComputeInstanceCatalogItemsHandler",
+	"public/v1.RegisterComputeInstancesHandler",
+	"public/v1.RegisterDiskImagesHandler",
+	"public/v1.RegisterConsoleSessionsHandler",
+	"public/v1.RegisterInstanceTypesHandler",
+	"private/v1.RegisterComputeInstanceTemplatesHandler",
+	"private/v1.RegisterComputeInstanceCatalogItemsHandler",
+	"private/v1.RegisterComputeInstancesHandler",
+	"private/v1.RegisterDiskImagesHandler",
+	"private/v1.RegisterInstanceTypesHandler",
+	"private/v1.RegisterVolumesHandler",
 }
 
 var bmaasHandlers = []string{
-	"v1.RegisterBareMetalInstanceTemplatesHandler",
-	"v1.RegisterBareMetalInstanceCatalogItemsHandler",
-	"v1.RegisterBareMetalInstancesHandler",
-	"v1.RegisterBareMetalInstanceTypesHandler",
+	"public/v1.RegisterBareMetalInstanceTemplatesHandler",
+	"public/v1.RegisterBareMetalInstanceCatalogItemsHandler",
+	"public/v1.RegisterBareMetalInstancesHandler",
+	"public/v1.RegisterBareMetalInstanceTypesHandler",
+	"private/v1.RegisterBareMetalInstanceTemplatesHandler",
+	"private/v1.RegisterBareMetalInstanceCatalogItemsHandler",
+	"private/v1.RegisterBareMetalInstancesHandler",
+	"private/v1.RegisterBareMetalInstanceTypesHandler",
 }
 
 var sharedHandlers = []string{
-	"v1.RegisterCapabilitiesHandler",
-	"v1.RegisterHostTypesHandler",
-	"v1.RegisterVirtualNetworksHandler",
-	"v1.RegisterSubnetsHandler",
-	"v1.RegisterSecurityGroupsHandler",
-	"v1.RegisterNATGatewaysHandler",
-	"v1.RegisterExternalIPPoolsHandler",
-	"v1.RegisterExternalIPsHandler",
-	"v1.RegisterExternalIPAttachmentsHandler",
-	"v1.RegisterRolesHandler",
-	"v1.RegisterRoleBindingsHandler",
+	"public/v1.RegisterCapabilitiesHandler",
+	"public/v1.RegisterHostTypesHandler",
+	"public/v1.RegisterVirtualNetworksHandler",
+	"public/v1.RegisterSubnetsHandler",
+	"public/v1.RegisterSecurityGroupsHandler",
+	"public/v1.RegisterNATGatewaysHandler",
+	"public/v1.RegisterExternalIPPoolsHandler",
+	"public/v1.RegisterExternalIPsHandler",
+	"public/v1.RegisterExternalIPAttachmentsHandler",
+	"public/v1.RegisterRolesHandler",
+	"public/v1.RegisterRoleBindingsHandler",
+	"private/v1.RegisterCapabilitiesHandler",
+	"private/v1.RegisterHostTypesHandler",
+	"private/v1.RegisterVirtualNetworksHandler",
+	"private/v1.RegisterSubnetsHandler",
+	"private/v1.RegisterSecurityGroupsHandler",
+	"private/v1.RegisterNATGatewaysHandler",
+	"private/v1.RegisterExternalIPPoolsHandler",
+	"private/v1.RegisterExternalIPsHandler",
+	"private/v1.RegisterExternalIPAttachmentsHandler",
+	"private/v1.RegisterRolesHandler",
+	"private/v1.RegisterRoleBindingsHandler",
 }
 
 func TestBuildHandlerList_AllEnabled(t *testing.T) {
