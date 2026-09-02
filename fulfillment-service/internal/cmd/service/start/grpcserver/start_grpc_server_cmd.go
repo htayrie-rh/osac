@@ -516,7 +516,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	disabledServiceCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fulfillment_disabled_service_requests_total",
 		Help: "Total requests to disabled services.",
-	}, []string{"service", "method"})
+	}, []string{"service"})
 	metricsRegisterer.MustRegister(disabledServiceCounter)
 	unknownHandler := NewUnknownServiceHandler(c.args.services, disabledServiceCounter)
 
