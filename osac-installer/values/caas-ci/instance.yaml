@@ -153,7 +153,6 @@ validation:
 
 # --- Bare Metal Fulfillment Operator ---
 bmf:
-  enabled: false
   image:
     repository: ghcr.io/osac-project/bare-metal-fulfillment-operator
     tag: latest
