@@ -7,12 +7,14 @@ import pytest
 
 from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
 from tests.e2e.core.helpers import assert_grpc_rejected
-from tests.e2e.core.runner import env, poll_until, run, run_unchecked
+from tests.e2e.core.runner import poll_until, run, run_unchecked
 
 
-def test_enable_service_via_helm_upgrade(grpc: GRPCClient, namespace: str) -> None:
-    chart_path = env("OSAC_CHART_PATH", "osac-installer/charts/osac")
-    release_name = env("OSAC_HELM_RELEASE", "osac")
+def test_enable_service_via_helm_upgrade(
+    grpc: GRPCClient, namespace: str, osac_chart_path: str, helm_release_name: str
+) -> None:
+    chart_path = osac_chart_path
+    release_name = helm_release_name
 
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
         grpc.call(service=f"{PUBLIC_API}.BareMetalInstances/List")
