@@ -14,241 +14,141 @@ language governing permissions and limitations under the License.
 package services
 
 import (
-	"strings"
-	"testing"
-
+	. "github.com/onsi/ginkgo/v2/dsl/core"
+	. "github.com/onsi/ginkgo/v2/dsl/table"
+	. "github.com/onsi/gomega"
 	"github.com/spf13/pflag"
 )
 
-func TestEnableAllIfNoneSet(t *testing.T) {
-	tests := []struct {
-		name     string
-		initial  Flags
-		expected Flags
-	}{
-		{
-			name:    "all false enables all",
-			initial: Flags{},
-			expected: Flags{
-				CaaS:  true,
-				VMaaS: true,
-				BMaaS: true,
-				MaaS:  true,
+var _ = Describe("Service flags", func() {
+	Describe("EnableAllIfNoneSet", func() {
+		DescribeTable("enables all services when none are set",
+			func(initial, expected Flags) {
+				initial.EnableAllIfNoneSet()
+				Expect(initial).To(Equal(expected))
 			},
-		},
-		{
-			name:    "one set preserves explicit flags",
-			initial: Flags{CaaS: true, VMaaS: true},
-			expected: Flags{
-				CaaS:  true,
-				VMaaS: true,
-				BMaaS: false,
-				MaaS:  false,
-			},
-		},
-		{
-			name:    "only BMaaS set preserves",
-			initial: Flags{BMaaS: true},
-			expected: Flags{
-				CaaS:  false,
-				VMaaS: false,
-				BMaaS: true,
-				MaaS:  false,
-			},
-		},
-		{
-			name:    "all already set remains unchanged",
-			initial: Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
-			expected: Flags{
-				CaaS:  true,
-				VMaaS: true,
-				BMaaS: true,
-				MaaS:  true,
-			},
-		},
-	}
+			Entry("all false enables all",
+				Flags{},
+				Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
+			),
+			Entry("one set preserves explicit flags",
+				Flags{CaaS: true, VMaaS: true},
+				Flags{CaaS: true, VMaaS: true, BMaaS: false, MaaS: false},
+			),
+			Entry("only BMaaS set preserves",
+				Flags{BMaaS: true},
+				Flags{CaaS: false, VMaaS: false, BMaaS: true, MaaS: false},
+			),
+			Entry("all already set remains unchanged",
+				Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
+				Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
+			),
+		)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := tt.initial
+	Describe("Validate", func() {
+		DescribeTable("validates service flag combinations",
+			func(flags Flags, valid bool, errSubstring string) {
+				err := flags.Validate()
+				if valid {
+					Expect(err).ToNot(HaveOccurred())
+				} else {
+					Expect(err).To(HaveOccurred())
+					if errSubstring != "" {
+						Expect(err.Error()).To(ContainSubstring(errSubstring))
+					}
+				}
+			},
+			Entry("all enabled is valid",
+				Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true}, true, "",
+			),
+			Entry("CaaS with VMaaS is valid",
+				Flags{CaaS: true, VMaaS: true}, true, "",
+			),
+			Entry("CaaS with BMaaS is valid",
+				Flags{CaaS: true, BMaaS: true}, true, "",
+			),
+			Entry("VMaaS only is valid",
+				Flags{VMaaS: true}, true, "",
+			),
+			Entry("BMaaS only is valid",
+				Flags{BMaaS: true}, true, "",
+			),
+			Entry("CaaS without VMaaS or BMaaS is invalid",
+				Flags{CaaS: true}, false, "CaaS requires at least one of VMaaS or BMaaS",
+			),
+			Entry("CaaS with MaaS but no VMaaS or BMaaS is invalid",
+				Flags{CaaS: true, MaaS: true}, false, "CaaS requires at least one of VMaaS or BMaaS",
+			),
+			Entry("MaaS without CaaS is invalid",
+				Flags{MaaS: true, VMaaS: true}, false, "MaaS requires CaaS",
+			),
+			Entry("MaaS alone is invalid",
+				Flags{MaaS: true}, false, "",
+			),
+		)
+
+		It("validates after EnableAllIfNoneSet", func() {
+			f := Flags{}
 			f.EnableAllIfNoneSet()
-			if f != tt.expected {
-				t.Errorf("got %+v, want %+v", f, tt.expected)
-			}
+			Expect(f.Validate()).ToNot(HaveOccurred())
 		})
-	}
-}
-
-func TestValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		flags   Flags
-		wantErr bool
-		errMsg  string
-	}{
-		{
-			name:    "all enabled is valid",
-			flags:   Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
-			wantErr: false,
-		},
-		{
-			name:    "CaaS with VMaaS is valid",
-			flags:   Flags{CaaS: true, VMaaS: true},
-			wantErr: false,
-		},
-		{
-			name:    "CaaS with BMaaS is valid",
-			flags:   Flags{CaaS: true, BMaaS: true},
-			wantErr: false,
-		},
-		{
-			name:    "VMaaS only is valid",
-			flags:   Flags{VMaaS: true},
-			wantErr: false,
-		},
-		{
-			name:    "BMaaS only is valid",
-			flags:   Flags{BMaaS: true},
-			wantErr: false,
-		},
-		{
-			name:    "CaaS without VMaaS or BMaaS is invalid",
-			flags:   Flags{CaaS: true},
-			wantErr: true,
-			errMsg:  "CaaS requires at least one of VMaaS or BMaaS",
-		},
-		{
-			name:    "CaaS with MaaS but no VMaaS or BMaaS is invalid",
-			flags:   Flags{CaaS: true, MaaS: true},
-			wantErr: true,
-			errMsg:  "CaaS requires at least one of VMaaS or BMaaS",
-		},
-		{
-			name:    "MaaS without CaaS is invalid",
-			flags:   Flags{MaaS: true, VMaaS: true},
-			wantErr: true,
-			errMsg:  "MaaS requires CaaS",
-		},
-		{
-			name:    "all disabled is valid after EnableAllIfNoneSet",
-			flags:   Flags{},
-			wantErr: false,
-		},
-		{
-			name:    "MaaS alone is invalid for both rules",
-			flags:   Flags{MaaS: true},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := tt.flags
-			if tt.name == "all disabled is valid after EnableAllIfNoneSet" {
-				f.EnableAllIfNoneSet()
-			}
-			err := f.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && tt.errMsg != "" {
-				if err == nil || !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("error message %q should contain %q", err, tt.errMsg)
-				}
-			}
-		})
-	}
-}
-
-func TestRegisterFlags(t *testing.T) {
-	t.Run("flags register and parse correctly", func(t *testing.T) {
-		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		flags := RegisterFlags(fs)
-
-		err := fs.Parse([]string{"--enable-caas", "--enable-vmaas"})
-		if err != nil {
-			t.Fatalf("failed to parse flags: %v", err)
-		}
-
-		if !flags.CaaS {
-			t.Error("CaaS should be true")
-		}
-		if !flags.VMaaS {
-			t.Error("VMaaS should be true")
-		}
-		if flags.BMaaS {
-			t.Error("BMaaS should be false")
-		}
-		if flags.MaaS {
-			t.Error("MaaS should be false")
-		}
 	})
 
-	t.Run("no flags means all false", func(t *testing.T) {
-		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		flags := RegisterFlags(fs)
+	Describe("RegisterFlags", func() {
+		It("registers and parses flags correctly", func() {
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			flags := RegisterFlags(fs)
 
-		err := fs.Parse([]string{})
-		if err != nil {
-			t.Fatalf("failed to parse flags: %v", err)
-		}
-
-		if flags.CaaS || flags.VMaaS || flags.BMaaS || flags.MaaS {
-			t.Errorf("all flags should be false by default, got %+v", flags)
-		}
-	})
-
-	t.Run("all flags can be set", func(t *testing.T) {
-		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
-		flags := RegisterFlags(fs)
-
-		err := fs.Parse([]string{"--enable-caas", "--enable-vmaas", "--enable-bmaas", "--enable-maas"})
-		if err != nil {
-			t.Fatalf("failed to parse flags: %v", err)
-		}
-
-		if !flags.CaaS || !flags.VMaaS || !flags.BMaaS || !flags.MaaS {
-			t.Errorf("all flags should be true, got %+v", flags)
-		}
-	})
-}
-
-func TestEnabledServices(t *testing.T) {
-	tests := []struct {
-		name     string
-		flags    Flags
-		expected []string
-	}{
-		{
-			name:     "all enabled",
-			flags:    Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
-			expected: []string{"caas", "vmaas", "bmaas", "maas"},
-		},
-		{
-			name:     "none enabled",
-			flags:    Flags{},
-			expected: []string{},
-		},
-		{
-			name:     "partial",
-			flags:    Flags{CaaS: true, BMaaS: true},
-			expected: []string{"caas", "bmaas"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := tt.flags.EnabledServices()
-			if len(got) != len(tt.expected) {
-				t.Errorf("EnabledServices() = %v, want %v", got, tt.expected)
-				return
-			}
-			for i, v := range got {
-				if v != tt.expected[i] {
-					t.Errorf("EnabledServices()[%d] = %q, want %q", i, v, tt.expected[i])
-				}
-			}
+			Expect(fs.Parse([]string{"--enable-caas", "--enable-vmaas"})).To(Succeed())
+			Expect(flags.CaaS).To(BeTrue())
+			Expect(flags.VMaaS).To(BeTrue())
+			Expect(flags.BMaaS).To(BeFalse())
+			Expect(flags.MaaS).To(BeFalse())
 		})
-	}
-}
+
+		It("defaults all flags to false", func() {
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			flags := RegisterFlags(fs)
+
+			Expect(fs.Parse([]string{})).To(Succeed())
+			Expect(flags.CaaS).To(BeFalse())
+			Expect(flags.VMaaS).To(BeFalse())
+			Expect(flags.BMaaS).To(BeFalse())
+			Expect(flags.MaaS).To(BeFalse())
+		})
+
+		It("allows all flags to be set", func() {
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			flags := RegisterFlags(fs)
+
+			Expect(fs.Parse([]string{
+				"--enable-caas", "--enable-vmaas", "--enable-bmaas", "--enable-maas",
+			})).To(Succeed())
+			Expect(flags.CaaS).To(BeTrue())
+			Expect(flags.VMaaS).To(BeTrue())
+			Expect(flags.BMaaS).To(BeTrue())
+			Expect(flags.MaaS).To(BeTrue())
+		})
+	})
+
+	Describe("EnabledServices", func() {
+		DescribeTable("returns enabled service names",
+			func(flags Flags, expected []string) {
+				Expect(flags.EnabledServices()).To(Equal(expected))
+			},
+			Entry("all enabled",
+				Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true},
+				[]string{"caas", "vmaas", "bmaas", "maas"},
+			),
+			Entry("none enabled",
+				Flags{},
+				[]string{},
+			),
+			Entry("partial",
+				Flags{CaaS: true, BMaaS: true},
+				[]string{"caas", "bmaas"},
+			),
+		)
+	})
+})
