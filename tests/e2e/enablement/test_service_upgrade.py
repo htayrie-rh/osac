@@ -7,11 +7,10 @@ import pytest
 
 from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
 from tests.e2e.core.helpers import assert_grpc_rejected
-from tests.e2e.core.k8s_client import K8sClient
 from tests.e2e.core.runner import env, poll_until, run, run_unchecked
 
 
-def test_enable_service_via_helm_upgrade(grpc: GRPCClient, k8s_hub_client: K8sClient, namespace: str) -> None:
+def test_enable_service_via_helm_upgrade(grpc: GRPCClient, namespace: str) -> None:
     chart_path = env("OSAC_CHART_PATH", "osac-installer/charts/osac")
     release_name = env("OSAC_HELM_RELEASE", "osac")
 

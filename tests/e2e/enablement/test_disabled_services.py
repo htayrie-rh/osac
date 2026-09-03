@@ -7,7 +7,6 @@ import pytest
 
 from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
 from tests.e2e.core.helpers import assert_grpc_rejected
-from tests.e2e.core.k8s_client import K8sClient
 from tests.e2e.core.runner import run, run_unchecked
 
 
@@ -53,7 +52,7 @@ def test_shared_infrastructure_always_available(grpc: GRPCClient) -> None:
         assert rc == 0, f"{service_method} should succeed (shared infra), got rc={rc}: {output}"
 
 
-def test_disabled_service_controllers_not_running(k8s_hub_client: K8sClient, namespace: str) -> None:
+def test_disabled_service_controllers_not_running(namespace: str) -> None:
     pods_json = run(
         "kubectl",
         "--as",

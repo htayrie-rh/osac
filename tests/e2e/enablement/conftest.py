@@ -6,7 +6,7 @@ from typing import Any, ClassVar
 import pytest
 import yaml
 
-from tests.e2e.core.runner import env, run
+from tests.e2e.core.runner import env, run, run_unchecked
 
 
 @pytest.fixture(scope="session")
@@ -47,8 +47,6 @@ class HelmTemplate:
         return list(yaml.safe_load_all(output))
 
     def render_expect_failure(self, *, set_values: list[str]) -> tuple[str, int]:
-        from tests.e2e.core.runner import run_unchecked
-
         args = ["helm", "template", "test-release", self.chart_path]
         for override in self._REQUIRED_OVERRIDES:
             args.extend(["--set", override])
