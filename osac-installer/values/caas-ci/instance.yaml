@@ -6,7 +6,7 @@ global:
     caas:
       enabled: true
     vmaas:
-      enabled: false
+      enabled: true
     bmaas:
       enabled: false
     maas:
