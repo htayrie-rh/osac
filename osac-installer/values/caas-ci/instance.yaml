@@ -6,9 +6,9 @@ global:
     caas:
       enabled: true
     vmaas:
-      enabled: true
-    bmaas:
       enabled: false
+    bmaas:
+      enabled: true
     maas:
       enabled: false
 
@@ -156,7 +156,11 @@ validation:
   enabled: true
 
 # --- Bare Metal Fulfillment Operator ---
+# BMaaS is enabled (so CaaS satisfies the "requires VMaaS or BMaaS" constraint
+# and BMaaS API endpoints register), but the BMF operator runs with zero
+# replicas because the CaaS CI cluster has no Metal3 infrastructure.
 bmf:
+  replicaCount: 0
   image:
     repository: ghcr.io/osac-project/bare-metal-fulfillment-operator
     tag: latest
