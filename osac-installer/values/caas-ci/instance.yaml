@@ -8,7 +8,7 @@ global:
     vmaas:
       enabled: false
     bmaas:
-      enabled: true
+      enabled: false
     maas:
       enabled: false
 

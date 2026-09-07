@@ -179,7 +179,7 @@ var _ = BeforeSuite(func() {
 		SetTenancyLogic(tenancy).
 		Build()
 	Expect(err).ToNot(HaveOccurred())
-	tierResolver := newDAOTierResolver(storageTiersDAO, storageBackendsDAO)
+	tierResolver = newDAOTierResolver(storageTiersDAO, storageBackendsDAO)
 
 	// Create the private users server, exactly as production does in start_grpc_server_cmd.go's run(). It's
 	// constructed outside RegisterResourceServers there because the JIT provisioning interceptor needs it before
