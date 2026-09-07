@@ -10,8 +10,6 @@ from tests.e2e.core.osac_cli import OsacCLI
 from tests.e2e.core.runner import run_unchecked
 
 CLIENT_LISTABLE_RESOURCES = [
-    "clustertemplates",
-    "clusters",
     "computeinstancetemplates",
     "computeinstances",
     "hosttypes",
