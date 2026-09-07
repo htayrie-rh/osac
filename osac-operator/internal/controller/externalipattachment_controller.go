@@ -79,6 +79,10 @@ type ExternalIPAttachmentReconciler struct {
 	// NetworkProvisioningEnabled controls whether the controller dispatches AAP
 	// provisioning jobs. When false, resources are set to Ready immediately.
 	NetworkProvisioningEnabled bool
+	// BareMetalInstanceEnabled controls whether the controller watches
+	// BareMetalInstance resources. When false (BMaaS disabled), the BMF
+	// scheme is not registered and the watch must be skipped.
+	BareMetalInstanceEnabled bool
 }
 
 // NewExternalIPAttachmentReconciler creates a new reconciler for ExternalIPAttachment resources.
@@ -1094,7 +1098,7 @@ func (r *ExternalIPAttachmentReconciler) mapComputeInstanceToExternalIPAttachmen
 
 // SetupWithManager registers this controller with the multicluster manager.
 func (r *ExternalIPAttachmentReconciler) SetupWithManager(mgr mcmanager.Manager) error {
-	return mcbuilder.ControllerManagedBy(mgr).
+	b := mcbuilder.ControllerManagedBy(mgr).
 		For(&v1alpha1.ExternalIPAttachment{},
 			mcbuilder.WithPredicates(NetworkingNamespacePredicate(r.NetworkingNamespace)),
 			mcbuilder.WithEngageWithLocalCluster(true),
@@ -1112,13 +1116,15 @@ func (r *ExternalIPAttachmentReconciler) SetupWithManager(mgr mcmanager.Manager)
 			mcbuilder.WithPredicates(NamespacePredicate(r.ClusterOrderNamespace)),
 			mcbuilder.WithEngageWithLocalCluster(true),
 			mcbuilder.WithEngageWithProviderClusters(false),
-		).
-		Watches(
+		)
+	if r.BareMetalInstanceEnabled {
+		b = b.Watches(
 			&bmfov1alpha1.BareMetalInstance{},
 			mchandler.EnqueueRequestsFromMapFunc(r.mapBaremetalInstanceToExternalIPAttachments),
 			mcbuilder.WithPredicates(BareMetalInstanceNamespacePredicate(r.BaremetalInstanceNamespace)),
 			mcbuilder.WithEngageWithLocalCluster(true),
 			mcbuilder.WithEngageWithProviderClusters(false),
-		).
-		Complete(r)
+		)
+	}
+	return b.Complete(r)
 }

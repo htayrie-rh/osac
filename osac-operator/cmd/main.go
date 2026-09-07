@@ -541,7 +541,7 @@ func setupControllers(
 		}
 	}
 	if flags.Networking {
-		if err := setupNetworkingControllers(mgr, grpcConn, maxJobHistory); err != nil {
+		if err := setupNetworkingControllers(mgr, grpcConn, maxJobHistory, flags.BareMetalInstance); err != nil {
 			return fmt.Errorf("networking controllers: %w", err)
 		}
 	}
@@ -648,6 +648,7 @@ func setupNetworkingControllers(
 	mgr mcmanager.Manager,
 	grpcConn *grpc.ClientConn,
 	maxJobHistory int,
+	enableBareMetalInstance bool,
 ) error {
 	localMgr := mgr.GetLocalManager()
 	targetCluster := targetClusterFromManager(mgr)
@@ -747,7 +748,7 @@ func setupNetworkingControllers(
 		mgr, localMgr, grpcConn,
 		networkingNamespace, computeInstanceNamespace, clusterOrderNamespace, bareMetalInstanceNamespace,
 		externalIPAttachmentProvider, statusPollInterval, maxJobHistory, targetCluster, resolver,
-		networkClassesClient, networkProvisioningEnabled,
+		networkClassesClient, networkProvisioningEnabled, enableBareMetalInstance,
 	); err != nil {
 		return err
 	}
@@ -917,7 +918,7 @@ func setupExternalIPAttachmentControllers(
 	provider provisioning.ProvisioningProvider,
 	statusPollInterval time.Duration, maxJobHistory int, targetCluster multicluster.ClusterName,
 	resolver *dispatcher.Resolver, networkClassesClient privatev1.NetworkClassesClient,
-	networkProvisioningEnabled bool,
+	networkProvisioningEnabled bool, enableBareMetalInstance bool,
 ) error {
 	reconciler := controller.NewExternalIPAttachmentReconciler(
 		mgr, networkingNamespace, computeInstanceNamespace,
@@ -926,6 +927,7 @@ func setupExternalIPAttachmentControllers(
 		resolver, networkClassesClient,
 	)
 	reconciler.NetworkProvisioningEnabled = networkProvisioningEnabled
+	reconciler.BareMetalInstanceEnabled = enableBareMetalInstance
 	if err := reconciler.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("externalipattachment controller: %w", err)
 	}
