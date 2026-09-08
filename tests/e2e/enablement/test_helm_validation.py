@@ -31,12 +31,14 @@ def _get_container_env(deployment: dict[str, Any], container_name_contains: str)
 
 
 def test_selective_services_render_correct_args(helm_template: HelmTemplate) -> None:
-    manifests = helm_template.render(set_values=["services.bmaas.enabled=false", "services.maas.enabled=false"])
+    manifests = helm_template.render(
+        set_values=["global.services.bmaas.enabled=false", "global.services.maas.enabled=false"]
+    )
 
-    fs_deploy = _find_deployment(manifests, "fulfillment")
+    fs_deploy = _find_deployment(manifests, "fulfillment-service")
     assert fs_deploy is not None, "fulfillment-service deployment not found in rendered manifests"
 
-    args = _get_container_args(fs_deploy, "fulfillment")
+    args = _get_container_args(fs_deploy, "fulfillment-service")
     assert "--enable-caas" in args
     assert "--enable-vmaas" in args
     assert "--enable-bmaas" not in args
@@ -55,10 +57,10 @@ def test_selective_services_render_correct_args(helm_template: HelmTemplate) -> 
 def test_default_values_enable_all_services(helm_template: HelmTemplate) -> None:
     manifests = helm_template.render()
 
-    fs_deploy = _find_deployment(manifests, "fulfillment")
+    fs_deploy = _find_deployment(manifests, "fulfillment-service")
     assert fs_deploy is not None, "fulfillment-service deployment not found in rendered manifests"
 
-    args = _get_container_args(fs_deploy, "fulfillment")
+    args = _get_container_args(fs_deploy, "fulfillment-service")
     for flag in ("--enable-caas", "--enable-vmaas", "--enable-bmaas", "--enable-maas"):
         assert flag in args, f"Expected {flag} in default render, got args: {args}"
 
@@ -79,7 +81,11 @@ def test_default_values_enable_all_services(helm_template: HelmTemplate) -> None
 
 def test_caas_without_compute_rejected(helm_template: HelmTemplate) -> None:
     output, rc = helm_template.render_expect_failure(
-        set_values=["services.caas.enabled=true", "services.vmaas.enabled=false", "services.bmaas.enabled=false"]
+        set_values=[
+            "global.services.caas.enabled=true",
+            "global.services.vmaas.enabled=false",
+            "global.services.bmaas.enabled=false",
+        ]
     )
     assert rc != 0, f"helm template should fail for CaaS without VMaaS/BMaaS, got rc=0: {output}"
     assert "caas" in output.lower() or "vmaas" in output.lower() or "bmaas" in output.lower(), (
@@ -89,7 +95,7 @@ def test_caas_without_compute_rejected(helm_template: HelmTemplate) -> None:
 
 def test_maas_without_caas_rejected(helm_template: HelmTemplate) -> None:
     output, rc = helm_template.render_expect_failure(
-        set_values=["services.maas.enabled=true", "services.caas.enabled=false"]
+        set_values=["global.services.maas.enabled=true", "global.services.caas.enabled=false"]
     )
     assert rc != 0, f"helm template should fail for MaaS without CaaS, got rc=0: {output}"
     assert "maas" in output.lower() or "caas" in output.lower(), (

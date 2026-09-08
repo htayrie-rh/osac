@@ -39,7 +39,9 @@ def test_disabled_service_rest_not_registered(fulfillment_address: str) -> None:
     assert "bareMetalInstances" not in body and "bare_metal_instances" not in body, (
         f"Disabled service REST endpoint should not return valid BMaaS data, got: {body[:200]}"
     )
-    assert status_code != "200", f"Disabled service REST endpoint should not return 200, got body: {body[:200]}"
+    assert not status_code.startswith("2"), (
+        f"Disabled service REST endpoint should not return 2xx, got {status_code}: {body[:200]}"
+    )
 
 
 def test_shared_infrastructure_always_available(grpc: GRPCClient) -> None:
@@ -68,13 +70,15 @@ def test_disabled_service_controllers_not_running(namespace: str) -> None:
     )
     pods = json.loads(pods_json)
     assert pods.get("items"), "osac-operator pod(s) should exist"
+    found_manager = False
     for pod in pods["items"]:
         for container in pod.get("spec", {}).get("containers", []):
             if "manager" in container.get("name", ""):
+                found_manager = True
                 env_map = {e["name"]: e.get("value", "") for e in container.get("env", [])}
-                assert env_map.get("OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER") == "false", (
-                    f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=false, got env: {env_map}"
-                )
+                actual = env_map.get("OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER")
+                assert actual == "false", f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=false, got: {actual}"
+    assert found_manager, "No manager container found in osac-operator pod(s)"
 
     bmf_output, _bmf_rc = run_unchecked(
         "kubectl",
