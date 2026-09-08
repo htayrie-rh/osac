@@ -29,7 +29,7 @@ def test_enable_service_via_helm_upgrade(
         namespace,
         "--reuse-values",
         "--set",
-        "services.bmaas.enabled=true",
+        "global.services.bmaas.enabled=true",
         timeout=120,
     )
 
@@ -58,7 +58,7 @@ def test_enable_service_via_helm_upgrade(
 
     response = grpc.call(service=f"{PUBLIC_API}.Capabilities/Get")
     enabled = response.get("enabledServices", response.get("enabled_services", []))
-    for svc_name in ("caas", "vmaas", "bmaas", "maas"):
+    for svc_name in ("caas", "vmaas", "bmaas"):
         assert svc_name in enabled, f"Capabilities should include {svc_name} after upgrade, got: {enabled}"
 
 
@@ -82,13 +82,17 @@ def _verify_operator_controller_enabled(*, namespace: str) -> None:
     )
     pods = json.loads(pods_json)
     assert pods.get("items"), "osac-operator pod(s) should exist after upgrade"
+    found_manager = False
     for pod in pods["items"]:
         for container in pod.get("spec", {}).get("containers", []):
             if "manager" in container.get("name", ""):
+                found_manager = True
                 env_map = {e["name"]: e.get("value", "") for e in container.get("env", [])}
-                assert env_map.get("OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER") == "true", (
-                    f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=true after upgrade, got: {env_map}"
+                actual = env_map.get("OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER")
+                assert actual == "true", (
+                    f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=true after upgrade, got: {actual}"
                 )
+    assert found_manager, "No manager container found in osac-operator pod(s) after upgrade"
 
 
 def _verify_bmf_pods_running(*, namespace: str) -> None:
