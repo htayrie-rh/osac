@@ -39,9 +39,7 @@ def test_disabled_service_rest_not_registered(fulfillment_address: str) -> None:
     assert "bareMetalInstances" not in body and "bare_metal_instances" not in body, (
         f"Disabled service REST endpoint should not return valid BMaaS data, got: {body[:200]}"
     )
-    assert not status_code.startswith("2"), (
-        f"Disabled service REST endpoint should not return 2xx, got {status_code}: {body[:200]}"
-    )
+    assert status_code == "503", f"Disabled service REST endpoint should return 503, got {status_code}: {body[:200]}"
 
 
 def test_shared_infrastructure_always_available(grpc: GRPCClient) -> None:
