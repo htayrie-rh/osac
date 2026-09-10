@@ -593,6 +593,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	c.logger.InfoContext(ctx, "Creating capabilities servers")
 	capabilitiesServer, err := servers.NewCapabilitiesServer().
 		SetLogger(c.logger).
+		SetServiceFlags(c.args.services).
 		AddAutnTrustedTokenIssuers(c.args.trustedTokenIssuers...).
 		Build()
 	if err != nil {
@@ -602,6 +603,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	publicv1.RegisterCapabilitiesServer(grpcServer, capabilitiesServer)
 	privateCapabilitiesServer, err := servers.NewPrivateCapabilitiesServer().
 		SetLogger(c.logger).
+		SetServiceFlags(c.args.services).
 		AddAuthnTrustedTokenIssuers(c.args.trustedTokenIssuers...).
 		Build()
 	if err != nil {
