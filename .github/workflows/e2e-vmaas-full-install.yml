@@ -234,6 +234,12 @@ jobs:
       # with either dependency unless an explicit workflow-dispatch marker is
       # supplied.
       test-marker: ${{ inputs.test-marker || 'not requires_caas and not requires_bmaas' }}
+      # Enablement tests need the same cluster after the regular VMaaS tests,
+      # then perform a Helm upgrade from BMaaS disabled to enabled.
+      additional-test-suite: enablement
+      # The enablement installation keeps BMaaS/MaaS disabled while enabling
+      # CaaS and VMaaS, which is the runtime state asserted by the suite.
+      helm-overrides: '{"global.services.caas.enabled":true}'
       # osac-installer now lives as a subdirectory of this same monorepo checkout
       # (its Chart.yaml deps resolve fulfillment-service/osac-operator/osac-aap/BMF
       # as ../../../<name> siblings within it), so a PR touching those components
