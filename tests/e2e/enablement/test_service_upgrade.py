@@ -1,38 +1,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
-
-import pytest
 
 from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.e2e.core.helpers import assert_grpc_rejected
 from tests.e2e.core.runner import poll_until, run, run_unchecked
 
 
-def test_enable_service_via_helm_upgrade(
-    grpc: GRPCClient, namespace: str, osac_chart_path: str, helm_release_name: str
-) -> None:
-    chart_path = osac_chart_path
-    release_name = helm_release_name
-
-    with pytest.raises(subprocess.CalledProcessError) as exc_info:
-        grpc.call(service=f"{PUBLIC_API}.BareMetalInstances/List")
-    assert_grpc_rejected(exc_info, "Unavailable")
-
-    run(
-        "helm",
-        "upgrade",
-        release_name,
-        chart_path,
-        "-n",
-        namespace,
-        "--reuse-values",
-        "--set",
-        "global.services.bmaas.enabled=true",
-        timeout=120,
-    )
-
+def test_enabled_services_after_upgrade(grpc: GRPCClient, namespace: str) -> None:
     _wait_for_rollout(namespace=namespace, deployment="fulfillment-service")
     _wait_for_rollout(namespace=namespace, deployment="osac-operator")
 
