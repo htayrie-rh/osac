@@ -31,7 +31,7 @@ def test_disabled_service_absent_from_reflection(fulfillment_address: str) -> No
 def test_disabled_service_rest_not_registered(fulfillment_address: str) -> None:
     host = fulfillment_address.rsplit(":", 1)[0]
     output, _rc = run_unchecked(
-        "curl", "-sk", "-o", "-", "-w", "\n%{http_code}", f"https://{host}/api/fulfillment/v1/bare-metal-instances"
+        "curl", "-sk", "-o", "-", "-w", "\n%{http_code}", f"https://{host}/api/fulfillment/v1/baremetal_instances"
     )
     lines = output.strip().splitlines()
     status_code = lines[-1] if lines else ""
@@ -78,7 +78,7 @@ def test_disabled_service_controllers_not_running(namespace: str) -> None:
                 assert actual == "false", f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=false, got: {actual}"
     assert found_manager, "No manager container found in osac-operator pod(s)"
 
-    bmf_output, _bmf_rc = run_unchecked(
+    bmf_json = run(
         "kubectl",
         "--as",
         "system:admin",
@@ -88,10 +88,11 @@ def test_disabled_service_controllers_not_running(namespace: str) -> None:
         namespace,
         "-l",
         "app.kubernetes.io/name=bare-metal-fulfillment-operator",
-        "--no-headers",
+        "-o",
+        "json",
     )
-    bmf_pods = [line for line in bmf_output.strip().splitlines() if line.strip()]
-    assert not bmf_pods, f"BMF operator pods should not exist when BMaaS is disabled, found: {bmf_output}"
+    bmf_pods = json.loads(bmf_json).get("items", [])
+    assert not bmf_pods, f"BMF operator pods should not exist when BMaaS is disabled, found: {bmf_pods}"
 
 
 def test_enabled_services_function_normally(grpc: GRPCClient) -> None:
