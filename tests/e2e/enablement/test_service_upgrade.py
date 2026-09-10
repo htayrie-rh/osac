@@ -50,7 +50,7 @@ def _verify_operator_controller_enabled(*, namespace: str) -> None:
         "-n",
         namespace,
         "-l",
-        "app.kubernetes.io/name=osac-operator",
+        "app.kubernetes.io/name=operator",
         "-o",
         "json",
     )

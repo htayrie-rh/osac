@@ -62,7 +62,7 @@ def test_disabled_service_controllers_not_running(namespace: str) -> None:
         "-n",
         namespace,
         "-l",
-        "app.kubernetes.io/name=osac-operator",
+        "app.kubernetes.io/name=operator",
         "-o",
         "json",
     )
