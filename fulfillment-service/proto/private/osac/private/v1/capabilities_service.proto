@@ -29,6 +29,9 @@ message CapabilitiesGetRequest {}
 message CapabilitiesGetResponse {
   // Authentication capabilities of the server.
   AuthnCapabilities authn = 1;
+
+  // Lowercase names of the services enabled in this deployment.
+  repeated string enabled_services = 2;
 }
 
 // Provides information about the capabilities of the server, such as the list of trusted token issuers for
