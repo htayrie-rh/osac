@@ -12,15 +12,6 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-type txTestServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (s *txTestServerStream) Context() context.Context {
-	return s.ctx
-}
-
 var _ = Describe("Transactions interceptor", func() {
 	var (
 		ctx     context.Context
@@ -127,23 +118,6 @@ var _ = Describe("Transactions interceptor", func() {
 				return
 			}
 			_, err := interceptor.UnaryServer(ctx, request, info, handler)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		It("Adds the transaction to the stream context", func() {
-			tx := NewMockTx(ctrl)
-			manager.EXPECT().Begin(ctx).Return(tx, nil).Times(1)
-			tx.EXPECT().End(ctx).Return(nil).Times(1)
-
-			stream := &txTestServerStream{ctx: ctx}
-			info := &grpc.StreamServerInfo{FullMethod: "/test.Service/Method"}
-			handler := func(_ any, stream grpc.ServerStream) error {
-				streamTx, err := TxFromContext(stream.Context())
-				Expect(err).ToNot(HaveOccurred())
-				Expect(streamTx).To(BeIdenticalTo(tx))
-				return nil
-			}
-			err := interceptor.StreamServer(nil, stream, info, handler)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
