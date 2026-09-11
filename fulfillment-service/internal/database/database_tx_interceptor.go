@@ -36,15 +36,6 @@ type TxInterceptor struct {
 	manager TxManager
 }
 
-type txServerStream struct {
-	grpc.ServerStream
-	ctx context.Context
-}
-
-func (s *txServerStream) Context() context.Context {
-	return s.ctx
-}
-
 // NewTxInterceptor creates a builder that can then be used to configure and create a transactions interceptor.
 func NewTxInterceptor() *TxInterceptorBuilder {
 	return &TxInterceptorBuilder{}
@@ -131,42 +122,5 @@ func (i *TxInterceptor) UnaryServer(ctx context.Context, request any, info *grpc
 
 	// Call the method:
 	response, err = handler(handlerCtx, request)
-	return
-}
-
-// StreamServer is the gRPC stream interceptor function. Unknown-service requests use the
-// stream path too, so they need the same transaction context as registered unary methods.
-func (i *TxInterceptor) StreamServer(server any, stream grpc.ServerStream, info *grpc.StreamServerInfo,
-	handler grpc.StreamHandler) (err error) {
-	ctx := stream.Context()
-	tx, err := i.manager.Begin(ctx)
-	if err != nil {
-		i.logger.ErrorContext(
-			ctx,
-			"Failed to begin transaction",
-			slog.String("method", info.FullMethod),
-			slog.Any("error", err),
-		)
-		return grpcstatus.Errorf(grpccodes.Internal, "failed to begin transaction")
-	}
-
-	defer func() {
-		txErr := tx.End(ctx)
-		if txErr != nil {
-			logFields := []any{slog.String("method", info.FullMethod)}
-			if err != nil {
-				logFields = append(logFields, slog.Any("method_error", err))
-			}
-			logFields = append(logFields, slog.Any("tx_error", txErr))
-			i.logger.ErrorContext(ctx, "Failed to end transaction", logFields...)
-		}
-		if err == nil && txErr != nil {
-			err = grpcstatus.Errorf(grpccodes.Internal, "failed to end transaction")
-		}
-	}()
-
-	streamCtx := TxManagerIntoContext(ctx, i.manager)
-	streamCtx = TxIntoContext(streamCtx, tx)
-	err = handler(server, &txServerStream{ServerStream: stream, ctx: streamCtx})
 	return
 }
