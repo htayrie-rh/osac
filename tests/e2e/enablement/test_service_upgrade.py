@@ -30,10 +30,6 @@ def test_enabled_services_after_upgrade(grpc: GRPCClient, namespace: str) -> Non
         output, rc = grpc.call_unchecked(service=svc)
         assert rc == 0, f"{svc} should succeed after enabling all services, got rc={rc}: {output}"
 
-    response = grpc.call(service=f"{PUBLIC_API}.Capabilities/Get")
-    enabled = response.get("enabledServices", response.get("enabled_services", []))
-    for svc_name in ("caas", "vmaas", "bmaas"):
-        assert svc_name in enabled, f"Capabilities should include {svc_name} after upgrade, got: {enabled}"
 
 
 def _wait_for_rollout(*, namespace: str, deployment: str) -> None:

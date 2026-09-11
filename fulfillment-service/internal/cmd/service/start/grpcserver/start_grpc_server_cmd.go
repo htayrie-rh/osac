@@ -548,6 +548,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 			metricsInterceptor.StreamServer,
 			loggingInterceptor.StreamServer,
 			validationInterceptor.StreamServer,
+			txInterceptor.StreamServer,
 			authnInterceptor.StreamServer,
 			authzInterceptor.StreamServer,
 			jitProvisioningInterceptor.StreamServer,
