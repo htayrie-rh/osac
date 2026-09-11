@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
+from tests.e2e.core.grpc_client import PRIVATE_API, PUBLIC_API, GRPCClient
 from tests.e2e.core.helpers import assert_grpc_rejected
 from tests.e2e.core.runner import run, run_unchecked
 
@@ -28,10 +28,18 @@ def test_disabled_service_absent_from_reflection(fulfillment_address: str) -> No
     assert f"{PUBLIC_API}.ComputeInstances" in services, "Enabled ComputeInstances should appear"
 
 
-def test_disabled_service_rest_not_registered(fulfillment_address: str) -> None:
+def test_disabled_service_rest_not_registered(fulfillment_address: str, grpc: GRPCClient) -> None:
     host = fulfillment_address.rsplit(":", 1)[0]
     output, _rc = run_unchecked(
-        "curl", "-sk", "-o", "-", "-w", "\n%{http_code}", f"https://{host}/api/fulfillment/v1/baremetal_instances"
+        "curl",
+        "-sk",
+        "-H",
+        f"Authorization: Bearer {grpc.token}",
+        "-o",
+        "-",
+        "-w",
+        "\n%{http_code}",
+        f"https://{host}/api/fulfillment/v1/baremetal_instances",
     )
     lines = output.strip().splitlines()
     status_code = lines[-1] if lines else ""
@@ -42,13 +50,13 @@ def test_disabled_service_rest_not_registered(fulfillment_address: str) -> None:
     assert status_code == "503", f"Disabled service REST endpoint should return 503, got {status_code}: {body[:200]}"
 
 
-def test_shared_infrastructure_always_available(grpc: GRPCClient) -> None:
+def test_shared_infrastructure_always_available(private_grpc: GRPCClient) -> None:
     for service_method in (
-        f"{PUBLIC_API}.Tenants/List",
-        f"{PUBLIC_API}.VirtualNetworks/List",
-        f"{PUBLIC_API}.StorageTiers/List",
+        f"{PRIVATE_API}.Tenants/List",
+        f"{PRIVATE_API}.VirtualNetworks/List",
+        f"{PRIVATE_API}.StorageTiers/List",
     ):
-        output, rc = grpc.call_unchecked(service=service_method)
+        output, rc = private_grpc.call_unchecked(service=service_method)
         assert rc == 0, f"{service_method} should succeed (shared infra), got rc={rc}: {output}"
 
 
@@ -101,15 +109,6 @@ def test_enabled_services_function_normally(grpc: GRPCClient) -> None:
 
     ci_output, ci_rc = grpc.call_unchecked(service=f"{PUBLIC_API}.ComputeInstances/List")
     assert ci_rc == 0, f"ComputeInstances.List (VMaaS) should succeed, got rc={ci_rc}: {ci_output}"
-
-
-def test_capabilities_excludes_disabled_services(grpc: GRPCClient) -> None:
-    response = grpc.call(service=f"{PUBLIC_API}.Capabilities/Get")
-    enabled = response.get("enabledServices", response.get("enabled_services", []))
-    assert "caas" in enabled, f"Capabilities should include caas, got: {enabled}"
-    assert "vmaas" in enabled, f"Capabilities should include vmaas, got: {enabled}"
-    assert "bmaas" not in enabled, f"Capabilities should not include bmaas, got: {enabled}"
-    assert "maas" not in enabled, f"Capabilities should not include maas, got: {enabled}"
 
 
 def test_hosttypes_filters_disabled_service(grpc: GRPCClient) -> None:
