@@ -22,9 +22,11 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	. "github.com/onsi/ginkgo/v2/dsl/core"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/collections"
+	"github.com/osac-project/osac/fulfillment-service/internal/database"
 	"github.com/osac-project/osac/fulfillment-service/internal/testing"
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
 )
@@ -69,6 +71,7 @@ func (m *mockServerStream) Context() context.Context {
 var _ = Describe("JIT Provisioning Interceptor", func() {
 	var (
 		ctx             context.Context
+		ctrl            *gomock.Controller
 		interceptor     *GrpcJitProvisioningInterceptor
 		mockProvisioner *mockUserProvisioner
 		handler         grpc.UnaryHandler
@@ -102,7 +105,9 @@ var _ = Describe("JIT Provisioning Interceptor", func() {
 		var err error
 
 		// Create a context:
-		ctx = context.Background()
+		ctrl = gomock.NewController(GinkgoT())
+		DeferCleanup(ctrl.Finish)
+		ctx = database.TxIntoContext(context.Background(), database.NewMockTx(ctrl))
 
 		// Reset handler tracking:
 		handlerCalled = false
@@ -466,6 +471,26 @@ var _ = Describe("JIT Provisioning Interceptor", func() {
 					streamHandlerCalled = true
 					return nil
 				}
+			})
+
+			It("Skips provisioning when the stream has no transaction", func() {
+				token := createKeycloakUserToken("tenant1", "alice-stream-no-tx", nil)
+				ctx = ContextWithToken(context.Background(), token)
+				ctx = ContextWithSubject(ctx, &Subject{
+					User:    "alice-stream-no-tx",
+					Tenants: collections.NewSet("tenant1"),
+				})
+
+				stream := &mockServerStream{ctx: ctx}
+				err := interceptor.StreamServer(
+					nil,
+					stream,
+					&grpc.StreamServerInfo{FullMethod: "/osac.public.v1.BareMetalInstances/List"},
+					streamHandler,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(streamHandlerCalled).To(BeTrue())
+				Expect(mockProvisioner.callCount).To(Equal(0))
 			})
 
 			It("Provisions a new user on first stream authentication", func() {

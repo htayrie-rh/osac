@@ -21,6 +21,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/database"
 	"github.com/osac-project/osac/fulfillment-service/internal/util"
 )
 
@@ -141,6 +142,14 @@ func (i *GrpcJitProvisioningInterceptor) provisionIfNeeded(ctx context.Context) 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		i.logger.ErrorContext(ctx, "Failed to extract claims from JWT token for user provisioning")
+		return nil
+	}
+
+	// Unknown-service requests use the gRPC stream interceptor chain, which does not
+	// currently provide a database transaction. Let those requests continue to the
+	// unknown-service handler instead of turning the missing transaction into an
+	// Internal error during JIT provisioning.
+	if _, err := database.TxFromContext(ctx); err != nil {
 		return nil
 	}
 
