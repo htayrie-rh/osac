@@ -87,7 +87,7 @@ func buildDisabledServiceMap(svcFlags *services.Flags) map[string]string {
 // DisabledServiceHandlerBuilder contains the data and logic needed to create a disabled-service handler. Don't create
 // objects of this type directly; use NewDisabledServiceHandler instead.
 type DisabledServiceHandlerBuilder struct {
-	disabledServices map[string]string
+	disabledServices  map[string]string
 	metricsRegisterer prometheus.Registerer
 }
 
