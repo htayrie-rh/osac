@@ -512,14 +512,19 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		return fmt.Errorf("failed to read gRPC keepalive configuration: %w", err)
 	}
 
-	// Create the disabled-service request counter and unknown service handler:
+	// Create the disabled-service request counter and handler:
 	disabledServiceCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "fulfillment_disabled_service_requests_total",
 		Help: "Total requests to disabled services.",
 	}, []string{"service"})
 	metricsRegisterer.MustRegister(disabledServiceCounter)
-	disabledServiceTapHandler := NewDisabledServiceTapHandler(c.args.services, disabledServiceCounter)
-	unknownHandler := NewUnknownServiceHandler(c.args.services, disabledServiceCounter)
+	disabledServiceHandler, err := NewDisabledServiceHandler().
+		SetDisabledServices(buildDisabledServiceMap(c.args.services)).
+		SetCounter(disabledServiceCounter).
+		Build()
+	if err != nil {
+		return fmt.Errorf("failed to create disabled-service handler: %w", err)
+	}
 
 	// Create the gRPC server:
 	c.logger.InfoContext(ctx, "Creating gRPC server")
@@ -532,8 +537,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 			MinTime:             keepaliveConfig.MinTime,
 			PermitWithoutStream: true,
 		}),
-		grpc.InTapHandle(disabledServiceTapHandler),
-		grpc.UnknownServiceHandler(unknownHandler),
+		grpc.InTapHandle(disabledServiceHandler),
 		grpc.ChainUnaryInterceptor(
 			panicInterceptor.UnaryServer,
 			metricsInterceptor.UnaryServer,

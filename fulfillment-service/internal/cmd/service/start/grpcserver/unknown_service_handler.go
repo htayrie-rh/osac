@@ -15,10 +15,11 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
+	"maps"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/tap"
@@ -83,10 +84,60 @@ func buildDisabledServiceMap(svcFlags *services.Flags) map[string]string {
 	return disabled
 }
 
-func disabledServiceError(method string, disabledMap map[string]string, counter *prometheus.CounterVec) error {
-	for prefix, group := range disabledMap {
+// disabledServiceHandlerBuilder contains the data and logic needed to create a disabled-service handler. Don't create
+// objects of this type directly; use NewDisabledServiceHandler instead.
+type disabledServiceHandlerBuilder struct {
+	disabledServices map[string]string
+	counter          *prometheus.CounterVec
+}
+
+// disabledServiceHandler handles requests to known-but-disabled services before they enter the interceptor chain.
+type disabledServiceHandler struct {
+	disabledServices map[string]string
+	counter          *prometheus.CounterVec
+}
+
+// NewDisabledServiceHandler creates a builder that can be used to configure and create a disabled-service handler.
+func NewDisabledServiceHandler() *disabledServiceHandlerBuilder {
+	return &disabledServiceHandlerBuilder{}
+}
+
+// SetDisabledServices sets the gRPC method prefixes for disabled services and their service group names. This is
+// mandatory, but an empty map is valid when all services are enabled.
+func (b *disabledServiceHandlerBuilder) SetDisabledServices(value map[string]string) *disabledServiceHandlerBuilder {
+	b.disabledServices = value
+	return b
+}
+
+// SetCounter sets the Prometheus counter used to record requests to disabled services. This is mandatory.
+func (b *disabledServiceHandlerBuilder) SetCounter(value *prometheus.CounterVec) *disabledServiceHandlerBuilder {
+	b.counter = value
+	return b
+}
+
+// Build uses the data stored in the builder to create a disabled-service tap handler.
+func (b *disabledServiceHandlerBuilder) Build() (result tap.ServerInHandle, err error) {
+	if b.disabledServices == nil {
+		err = errors.New("disabled services are mandatory")
+		return
+	}
+	if b.counter == nil {
+		err = errors.New("counter is mandatory")
+		return
+	}
+
+	handler := &disabledServiceHandler{
+		disabledServices: maps.Clone(b.disabledServices),
+		counter:          b.counter,
+	}
+	result = handler.handle
+	return
+}
+
+func (h *disabledServiceHandler) disabledServiceError(method string) error {
+	for prefix, group := range h.disabledServices {
 		if strings.HasPrefix(method, prefix) {
-			counter.WithLabelValues(group).Inc()
+			h.counter.WithLabelValues(group).Inc()
 			return status.Errorf(
 				codes.Unavailable,
 				"the %s service is not enabled on this server",
@@ -97,40 +148,10 @@ func disabledServiceError(method string, disabledMap map[string]string, counter 
 	return nil
 }
 
-// NewDisabledServiceTapHandler returns a gRPC tap handler that rejects requests
-// for known-but-disabled services before they enter the interceptor chain.
-func NewDisabledServiceTapHandler(
-	svcFlags *services.Flags,
-	counter *prometheus.CounterVec,
-) tap.ServerInHandle {
-	disabledMap := buildDisabledServiceMap(svcFlags)
-
-	return func(ctx context.Context, info *tap.Info) (context.Context, error) {
-		if err := disabledServiceError(info.FullMethodName, disabledMap, counter); err != nil {
-			return ctx, err
-		}
-		return ctx, nil
+// handle rejects requests to known-but-disabled services before they enter the interceptor chain.
+func (h *disabledServiceHandler) handle(ctx context.Context, info *tap.Info) (context.Context, error) {
+	if err := h.disabledServiceError(info.FullMethodName); err != nil {
+		return ctx, err
 	}
-}
-
-// NewUnknownServiceHandler returns a grpc.StreamHandler that returns codes.Unavailable for
-// known-but-disabled services and codes.Unimplemented for genuinely unknown services.
-func NewUnknownServiceHandler(
-	svcFlags *services.Flags,
-	counter *prometheus.CounterVec,
-) grpc.StreamHandler {
-	disabledMap := buildDisabledServiceMap(svcFlags)
-
-	return func(_ interface{}, stream grpc.ServerStream) error {
-		method, ok := grpc.MethodFromServerStream(stream)
-		if !ok {
-			return status.Error(codes.Unimplemented, "unknown service")
-		}
-
-		if err := disabledServiceError(method, disabledMap, counter); err != nil {
-			return err
-		}
-
-		return status.Errorf(codes.Unimplemented, "unknown service %s", method)
-	}
+	return ctx, nil
 }

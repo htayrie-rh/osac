@@ -38,15 +38,20 @@ func newTestCounter(reg *prometheus.Registry) *prometheus.CounterVec {
 	return counter
 }
 
-func startTestServer(handler grpc.StreamHandler) (*grpc.ClientConn, func()) {
-	return startTestServerWithTap(handler, nil)
+func newTestHandler(disabledServices map[string]string, counter *prometheus.CounterVec) tap.ServerInHandle {
+	handler, err := NewDisabledServiceHandler().
+		SetDisabledServices(disabledServices).
+		SetCounter(counter).
+		Build()
+	Expect(err).ToNot(HaveOccurred())
+	return handler
 }
 
-func startTestServerWithTap(handler grpc.StreamHandler, tapHandler tap.ServerInHandle) (*grpc.ClientConn, func()) {
+func startTestServerWithTap(tapHandler tap.ServerInHandle) (*grpc.ClientConn, func()) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	Expect(err).ToNot(HaveOccurred())
 
-	options := []grpc.ServerOption{grpc.UnknownServiceHandler(handler)}
+	var options []grpc.ServerOption
 	if tapHandler != nil {
 		options = append(options, grpc.InTapHandle(tapHandler))
 	}
@@ -83,13 +88,14 @@ func getCounterValue(counter *prometheus.CounterVec, labels ...string) float64 {
 	return *m.Counter.Value
 }
 
-var _ = Describe("UnknownServiceHandler", func() {
+var _ = Describe("DisabledServiceTapHandler", func() {
 	It("returns Unavailable for a disabled service", func() {
 		reg := prometheus.NewRegistry()
 		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
-		handler := NewUnknownServiceHandler(flags, counter)
-		conn, cleanup := startTestServer(handler)
+		handler := newTestHandler(map[string]string{
+			"/osac.public.v1.Clusters/": "CaaS",
+		}, counter)
+		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
 		err := invokeMethod(conn, "/osac.public.v1.Clusters/List")
@@ -104,9 +110,8 @@ var _ = Describe("UnknownServiceHandler", func() {
 	It("returns Unimplemented for an unknown service", func() {
 		reg := prometheus.NewRegistry()
 		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: true}
-		handler := NewUnknownServiceHandler(flags, counter)
-		conn, cleanup := startTestServer(handler)
+		handler := newTestHandler(map[string]string{}, counter)
+		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
 		err := invokeMethod(conn, "/osac.public.v1.NonExistent/Get")
@@ -120,9 +125,11 @@ var _ = Describe("UnknownServiceHandler", func() {
 	It("increments the Prometheus counter for disabled services", func() {
 		reg := prometheus.NewRegistry()
 		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: false, MaaS: false}
-		handler := NewUnknownServiceHandler(flags, counter)
-		conn, cleanup := startTestServer(handler)
+		handler := newTestHandler(map[string]string{
+			"/osac.public.v1.Clusters/":           "CaaS",
+			"/osac.public.v1.BareMetalInstances/": "BMaaS",
+		}, counter)
+		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
 		_ = invokeMethod(conn, "/osac.public.v1.Clusters/List")
@@ -133,60 +140,6 @@ var _ = Describe("UnknownServiceHandler", func() {
 		Expect(getCounterValue(counter, "BMaaS")).To(Equal(1.0))
 	})
 
-	It("returns Unimplemented for an enabled but not registered service", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
-		handler := NewUnknownServiceHandler(flags, counter)
-		conn, cleanup := startTestServer(handler)
-		DeferCleanup(cleanup)
-
-		err := invokeMethod(conn, "/osac.public.v1.ComputeInstances/List")
-		Expect(err).To(HaveOccurred())
-
-		st, ok := status.FromError(err)
-		Expect(ok).To(BeTrue())
-		Expect(st.Code()).To(Equal(codes.Unimplemented))
-	})
-})
-
-var _ = Describe("DisabledServiceTapHandler", func() {
-	It("rejects disabled services before the unknown service handler", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: false, VMaaS: true, BMaaS: true, MaaS: false}
-		tapHandler := NewDisabledServiceTapHandler(flags, counter)
-		handler := func(interface{}, grpc.ServerStream) error {
-			return status.Error(codes.Internal, "unknown service handler was called")
-		}
-		conn, cleanup := startTestServerWithTap(handler, tapHandler)
-		DeferCleanup(cleanup)
-
-		err := invokeMethod(conn, "/osac.public.v1.Clusters/List")
-		st, ok := status.FromError(err)
-		Expect(ok).To(BeTrue())
-		Expect(st.Code()).To(Equal(codes.Unavailable))
-		Expect(st.Message()).To(Equal("the CaaS service is not enabled on this server"))
-		Expect(getCounterValue(counter, "CaaS")).To(Equal(1.0))
-	})
-
-	It("allows enabled and unknown methods to reach the unknown service handler", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		flags := &services.Flags{CaaS: true, VMaaS: true, BMaaS: true, MaaS: false}
-		tapHandler := NewDisabledServiceTapHandler(flags, counter)
-		handler := func(interface{}, grpc.ServerStream) error {
-			return status.Error(codes.Unimplemented, "fallback")
-		}
-		conn, cleanup := startTestServerWithTap(handler, tapHandler)
-		DeferCleanup(cleanup)
-
-		err := invokeMethod(conn, "/osac.public.v1.NonExistent/Get")
-		st, ok := status.FromError(err)
-		Expect(ok).To(BeTrue())
-		Expect(st.Code()).To(Equal(codes.Unimplemented))
-		Expect(getCounterValue(counter, "CaaS")).To(Equal(0.0))
-	})
 })
 
 var _ = Describe("buildDisabledServiceMap", func() {

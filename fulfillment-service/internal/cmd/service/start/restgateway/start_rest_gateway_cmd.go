@@ -306,7 +306,7 @@ func (c *runnerContext) registerHandlers(ctx context.Context, mux *runtime.Serve
 
 // buildHandlerList returns the complete set of grpc-gateway handler registrars.
 // All handlers are always registered; disabled services are rejected by the gRPC
-// server's UnknownServiceHandler, which grpc-gateway translates to HTTP 503.
+// server's tap handler, which grpc-gateway translates to HTTP 503.
 func buildHandlerList() []handlerRegistrar {
 	return []handlerRegistrar{
 		// Shared public API:
