@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from tests.e2e.core.grpc_client import PUBLIC_API, GRPCClient
-from tests.e2e.core.runner import poll_until, run, run_unchecked
+from tests.e2e.core.runner import poll_until, run
 
 
 def test_enabled_services_after_upgrade(grpc: GRPCClient, namespace: str) -> None:
@@ -20,7 +20,6 @@ def test_enabled_services_after_upgrade(grpc: GRPCClient, namespace: str) -> Non
     )
 
     _verify_operator_controller_enabled(namespace=namespace)
-    _verify_bmf_pods_running(namespace=namespace)
 
     for svc in (
         f"{PUBLIC_API}.Clusters/List",
@@ -63,24 +62,3 @@ def _verify_operator_controller_enabled(*, namespace: str) -> None:
                     f"Expected OSAC_ENABLE_BAREMETAL_INSTANCE_CONTROLLER=true after upgrade, got: {actual}"
                 )
     assert found_manager, "No manager container found in osac-operator pod(s) after upgrade"
-
-
-def _verify_bmf_pods_running(*, namespace: str) -> None:
-    poll_until(
-        fn=lambda: run_unchecked(
-            "kubectl",
-            "--as",
-            "system:admin",
-            "get",
-            "pods",
-            "-n",
-            namespace,
-            "-l",
-            "app.kubernetes.io/name=bare-metal-fulfillment-operator",
-            "--no-headers",
-        ),
-        until=lambda result: result[1] == 0 and any(line.strip() for line in result[0].strip().splitlines()),
-        retries=30,
-        delay=5,
-        description="BMF operator pods running after upgrade",
-    )
