@@ -7,7 +7,7 @@ from tests.e2e.core.runner import poll_until, run
 
 
 def test_enabled_services_after_upgrade(grpc: GRPCClient, namespace: str) -> None:
-    _wait_for_rollout(namespace=namespace, deployment="fulfillment-service")
+    _wait_for_rollout(namespace=namespace, deployment="fulfillment-grpc-server")
     _wait_for_rollout(namespace=namespace, deployment="osac-operator")
 
     poll_until(
