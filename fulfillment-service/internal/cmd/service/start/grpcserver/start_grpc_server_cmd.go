@@ -513,14 +513,9 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 	}
 
 	// Create the disabled-service request counter and handler:
-	disabledServiceCounter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "fulfillment_disabled_service_requests_total",
-		Help: "Total requests to disabled services.",
-	}, []string{"service"})
-	metricsRegisterer.MustRegister(disabledServiceCounter)
 	disabledServiceHandler, err := NewDisabledServiceHandler().
 		SetDisabledServices(buildDisabledServiceMap(c.args.services)).
-		SetCounter(disabledServiceCounter).
+		SetMetricsRegisterer(metricsRegisterer).
 		Build()
 	if err != nil {
 		return fmt.Errorf("failed to create disabled-service handler: %w", err)

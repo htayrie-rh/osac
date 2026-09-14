@@ -84,11 +84,11 @@ func buildDisabledServiceMap(svcFlags *services.Flags) map[string]string {
 	return disabled
 }
 
-// disabledServiceHandlerBuilder contains the data and logic needed to create a disabled-service handler. Don't create
+// DisabledServiceHandlerBuilder contains the data and logic needed to create a disabled-service handler. Don't create
 // objects of this type directly; use NewDisabledServiceHandler instead.
-type disabledServiceHandlerBuilder struct {
+type DisabledServiceHandlerBuilder struct {
 	disabledServices map[string]string
-	counter          *prometheus.CounterVec
+	metricsRegisterer prometheus.Registerer
 }
 
 // disabledServiceHandler handles requests to known-but-disabled services before they enter the interceptor chain.
@@ -98,60 +98,70 @@ type disabledServiceHandler struct {
 }
 
 // NewDisabledServiceHandler creates a builder that can be used to configure and create a disabled-service handler.
-func NewDisabledServiceHandler() *disabledServiceHandlerBuilder {
-	return &disabledServiceHandlerBuilder{}
+func NewDisabledServiceHandler() *DisabledServiceHandlerBuilder {
+	return &DisabledServiceHandlerBuilder{}
 }
 
 // SetDisabledServices sets the gRPC method prefixes for disabled services and their service group names. This is
 // mandatory, but an empty map is valid when all services are enabled.
-func (b *disabledServiceHandlerBuilder) SetDisabledServices(value map[string]string) *disabledServiceHandlerBuilder {
+func (b *DisabledServiceHandlerBuilder) SetDisabledServices(value map[string]string) *DisabledServiceHandlerBuilder {
 	b.disabledServices = value
 	return b
 }
 
-// SetCounter sets the Prometheus counter used to record requests to disabled services. This is mandatory.
-func (b *disabledServiceHandlerBuilder) SetCounter(value *prometheus.CounterVec) *disabledServiceHandlerBuilder {
-	b.counter = value
+// SetMetricsRegisterer sets the Prometheus registerer used to register the handler metrics. This is mandatory.
+func (b *DisabledServiceHandlerBuilder) SetMetricsRegisterer(value prometheus.Registerer) *DisabledServiceHandlerBuilder {
+	b.metricsRegisterer = value
 	return b
 }
 
 // Build uses the data stored in the builder to create a disabled-service tap handler.
-func (b *disabledServiceHandlerBuilder) Build() (result tap.ServerInHandle, err error) {
+func (b *DisabledServiceHandlerBuilder) Build() (result tap.ServerInHandle, err error) {
 	if b.disabledServices == nil {
 		err = errors.New("disabled services are mandatory")
 		return
 	}
-	if b.counter == nil {
-		err = errors.New("counter is mandatory")
+	if b.metricsRegisterer == nil {
+		err = errors.New("metrics registerer is mandatory")
 		return
+	}
+
+	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "fulfillment_disabled_service_requests_total",
+		Help: "Total requests to disabled services.",
+	}, []string{"service"})
+	if err = b.metricsRegisterer.Register(counter); err != nil {
+		var registered prometheus.AlreadyRegisteredError
+		if !errors.As(err, &registered) {
+			return
+		}
+		var ok bool
+		counter, ok = registered.ExistingCollector.(*prometheus.CounterVec)
+		if !ok {
+			err = errors.New("registered disabled-service metric has unexpected type")
+			return
+		}
 	}
 
 	handler := &disabledServiceHandler{
 		disabledServices: maps.Clone(b.disabledServices),
-		counter:          b.counter,
+		counter:          counter,
 	}
 	result = handler.handle
 	return
 }
 
-func (h *disabledServiceHandler) disabledServiceError(method string) error {
+// handle rejects requests to known-but-disabled services before they enter the interceptor chain.
+func (h *disabledServiceHandler) handle(ctx context.Context, info *tap.Info) (context.Context, error) {
 	for prefix, group := range h.disabledServices {
-		if strings.HasPrefix(method, prefix) {
+		if strings.HasPrefix(info.FullMethodName, prefix) {
 			h.counter.WithLabelValues(group).Inc()
-			return status.Errorf(
+			return ctx, status.Errorf(
 				codes.Unavailable,
 				"the %s service is not enabled on this server",
 				group,
 			)
 		}
-	}
-	return nil
-}
-
-// handle rejects requests to known-but-disabled services before they enter the interceptor chain.
-func (h *disabledServiceHandler) handle(ctx context.Context, info *tap.Info) (context.Context, error) {
-	if err := h.disabledServiceError(info.FullMethodName); err != nil {
-		return ctx, err
 	}
 	return ctx, nil
 }

@@ -20,7 +20,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -30,21 +29,14 @@ import (
 	"github.com/osac-project/osac/fulfillment-service/internal/services"
 )
 
-func newTestCounter(reg *prometheus.Registry) *prometheus.CounterVec {
-	counter := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "fulfillment_disabled_service_requests_total",
-	}, []string{"service"})
-	reg.MustRegister(counter)
-	return counter
-}
-
-func newTestHandler(disabledServices map[string]string, counter *prometheus.CounterVec) tap.ServerInHandle {
+func newTestHandler(disabledServices map[string]string) (tap.ServerInHandle, *prometheus.Registry) {
+	reg := prometheus.NewRegistry()
 	handler, err := NewDisabledServiceHandler().
 		SetDisabledServices(disabledServices).
-		SetCounter(counter).
+		SetMetricsRegisterer(reg).
 		Build()
 	Expect(err).ToNot(HaveOccurred())
-	return handler
+	return handler, reg
 }
 
 func startTestServerWithTap(tapHandler tap.ServerInHandle) (*grpc.ClientConn, func()) {
@@ -75,26 +67,29 @@ func invokeMethod(conn *grpc.ClientConn, fullMethod string) error {
 	return conn.Invoke(context.Background(), fullMethod, nil, &struct{}{})
 }
 
-func getCounterValue(counter *prometheus.CounterVec, labels ...string) float64 {
-	m := &dto.Metric{}
-	c, err := counter.GetMetricWithLabelValues(labels...)
-	if err != nil {
-		return 0
+func getCounterValue(reg *prometheus.Registry, service string) float64 {
+	metricFamilies, err := reg.Gather()
+	Expect(err).ToNot(HaveOccurred())
+	for _, family := range metricFamilies {
+		if family.GetName() != "fulfillment_disabled_service_requests_total" {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			for _, label := range metric.GetLabel() {
+				if label.GetName() == "service" && label.GetValue() == service {
+					return metric.GetCounter().GetValue()
+				}
+			}
+		}
 	}
-	_ = c.Write(m)
-	if m.Counter == nil {
-		return 0
-	}
-	return *m.Counter.Value
+	return 0
 }
 
 var _ = Describe("DisabledServiceTapHandler", func() {
 	It("returns Unavailable for a disabled service", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		handler := newTestHandler(map[string]string{
+		handler, _ := newTestHandler(map[string]string{
 			"/osac.public.v1.Clusters/": "CaaS",
-		}, counter)
+		})
 		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
@@ -108,9 +103,7 @@ var _ = Describe("DisabledServiceTapHandler", func() {
 	})
 
 	It("returns Unimplemented for an unknown service", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		handler := newTestHandler(map[string]string{}, counter)
+		handler, _ := newTestHandler(map[string]string{})
 		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
@@ -123,12 +116,10 @@ var _ = Describe("DisabledServiceTapHandler", func() {
 	})
 
 	It("increments the Prometheus counter for disabled services", func() {
-		reg := prometheus.NewRegistry()
-		counter := newTestCounter(reg)
-		handler := newTestHandler(map[string]string{
-			"/osac.public.v1.Clusters/":           "CaaS",
-			"/osac.public.v1.BareMetalInstances/": "BMaaS",
-		}, counter)
+		handler, reg := newTestHandler(map[string]string{
+			"/osac.public.v1.Clusters/":            "CaaS",
+			"/osac.private.v1.BareMetalInstances/": "BMaaS",
+		})
 		conn, cleanup := startTestServerWithTap(handler)
 		DeferCleanup(cleanup)
 
@@ -136,8 +127,8 @@ var _ = Describe("DisabledServiceTapHandler", func() {
 		_ = invokeMethod(conn, "/osac.public.v1.Clusters/Get")
 		_ = invokeMethod(conn, "/osac.private.v1.BareMetalInstances/List")
 
-		Expect(getCounterValue(counter, "CaaS")).To(Equal(2.0))
-		Expect(getCounterValue(counter, "BMaaS")).To(Equal(1.0))
+		Expect(getCounterValue(reg, "CaaS")).To(Equal(2.0))
+		Expect(getCounterValue(reg, "BMaaS")).To(Equal(1.0))
 	})
 
 })
