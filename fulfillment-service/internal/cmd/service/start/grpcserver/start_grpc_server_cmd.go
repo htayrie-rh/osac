@@ -518,6 +518,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 		Help: "Total requests to disabled services.",
 	}, []string{"service"})
 	metricsRegisterer.MustRegister(disabledServiceCounter)
+	disabledServiceTapHandler := NewDisabledServiceTapHandler(c.args.services, disabledServiceCounter)
 	unknownHandler := NewUnknownServiceHandler(c.args.services, disabledServiceCounter)
 
 	// Create the gRPC server:
@@ -531,6 +532,7 @@ func (c *runnerContext) run(cmd *cobra.Command, argv []string) error { //nolint:
 			MinTime:             keepaliveConfig.MinTime,
 			PermitWithoutStream: true,
 		}),
+		grpc.InTapHandle(disabledServiceTapHandler),
 		grpc.UnknownServiceHandler(unknownHandler),
 		grpc.ChainUnaryInterceptor(
 			panicInterceptor.UnaryServer,

@@ -14,12 +14,14 @@ language governing permissions and limitations under the License.
 package grpcserver
 
 import (
+	"context"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/tap"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/services"
 )
@@ -81,6 +83,36 @@ func buildDisabledServiceMap(svcFlags *services.Flags) map[string]string {
 	return disabled
 }
 
+func disabledServiceError(method string, disabledMap map[string]string, counter *prometheus.CounterVec) error {
+	for prefix, group := range disabledMap {
+		if strings.HasPrefix(method, prefix) {
+			counter.WithLabelValues(group).Inc()
+			return status.Errorf(
+				codes.Unavailable,
+				"the %s service is not enabled on this server",
+				group,
+			)
+		}
+	}
+	return nil
+}
+
+// NewDisabledServiceTapHandler returns a gRPC tap handler that rejects requests
+// for known-but-disabled services before they enter the interceptor chain.
+func NewDisabledServiceTapHandler(
+	svcFlags *services.Flags,
+	counter *prometheus.CounterVec,
+) tap.ServerInHandle {
+	disabledMap := buildDisabledServiceMap(svcFlags)
+
+	return func(ctx context.Context, info *tap.Info) (context.Context, error) {
+		if err := disabledServiceError(info.FullMethodName, disabledMap, counter); err != nil {
+			return ctx, err
+		}
+		return ctx, nil
+	}
+}
+
 // NewUnknownServiceHandler returns a grpc.StreamHandler that returns codes.Unavailable for
 // known-but-disabled services and codes.Unimplemented for genuinely unknown services.
 func NewUnknownServiceHandler(
@@ -95,15 +127,8 @@ func NewUnknownServiceHandler(
 			return status.Error(codes.Unimplemented, "unknown service")
 		}
 
-		for prefix, group := range disabledMap {
-			if strings.HasPrefix(method, prefix) {
-				counter.WithLabelValues(group).Inc()
-				return status.Errorf(
-					codes.Unavailable,
-					"the %s service is not enabled on this server",
-					group,
-				)
-			}
+		if err := disabledServiceError(method, disabledMap, counter); err != nil {
+			return err
 		}
 
 		return status.Errorf(codes.Unimplemented, "unknown service %s", method)
