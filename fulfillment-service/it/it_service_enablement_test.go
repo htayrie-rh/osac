@@ -76,7 +76,7 @@ var _ = Describe("Service enablement", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(privateCapabilitiesResponse.GetEnabledServices()).To(Equal(expectedServices))
 
-		Expect(grpcstatus.Code(disabledGrpcError)).To(Equal(grpccodes.Unimplemented))
+		Expect(grpcstatus.Code(disabledGrpcError)).To(Equal(grpccodes.Unavailable))
 
 		// The REST gateway registers all routes and translates an unavailable gRPC service to HTTP 503.
 		restRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, disabledRestPath, nil)
