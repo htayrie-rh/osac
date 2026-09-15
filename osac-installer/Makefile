@@ -298,6 +298,12 @@ ifeq ($(SUITE),fulfillment)
 		EXTRA_HELM_ARGS="--set service.images.service=localhost/fulfillment-service:it --set operator.enabled=false --set networkClass.enabled=false"
 	@for f in ../fulfillment-service/it/crds/*.yaml; do kubectl apply --server-side --force-conflicts -f "$$f"; done
 	cd ../fulfillment-service && ginkgo run --timeout 1h -v it
+	$(MAKE) install-osac PLATFORM=$(PLATFORM) PROFILE=$(PROFILE) NS=$(NS) \
+		EXTRA_HELM_ARGS="--set service.images.service=localhost/fulfillment-service:it --set global.services.bmaas.enabled=false --set operator.enabled=false --set networkClass.enabled=false"
+	cd ../fulfillment-service && IT_TEST_SUITE=bmaas-disabled ginkgo run --timeout 1h -v --focus 'Service enablement' it
+	$(MAKE) install-osac PLATFORM=$(PLATFORM) PROFILE=$(PROFILE) NS=$(NS) \
+		EXTRA_HELM_ARGS="--set service.images.service=localhost/fulfillment-service:it --set global.services.vmaas.enabled=false --set operator.enabled=false --set networkClass.enabled=false"
+	cd ../fulfillment-service && IT_TEST_SUITE=vmaas-disabled ginkgo run --timeout 1h -v --focus 'Service enablement' it
 endif
 ifeq ($(SUITE),operator)
 	$(CONTAINER_TOOL) build -t localhost/osac-operator:it -f ../osac-operator/Containerfile ..
