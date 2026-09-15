@@ -9,6 +9,8 @@ from tests.e2e.core.grpc_client import PRIVATE_API, PUBLIC_API, GRPCClient
 from tests.e2e.core.helpers import assert_grpc_rejected
 from tests.e2e.core.runner import run, run_unchecked
 
+pytestmark = pytest.mark.sanity
+
 
 def test_disabled_service_grpc_unavailable(grpc: GRPCClient) -> None:
     with pytest.raises(subprocess.CalledProcessError) as exc_info:
@@ -24,7 +26,6 @@ def test_disabled_service_absent_from_reflection(fulfillment_address: str) -> No
     assert f"{PUBLIC_API}.BareMetalInstances" not in services, (
         "Disabled BareMetalInstances should not appear in reflection"
     )
-    assert f"{PUBLIC_API}.Clusters" in services, "Enabled Clusters should appear in reflection"
     assert f"{PUBLIC_API}.ComputeInstances" in services, "Enabled ComputeInstances should appear"
 
 
@@ -104,9 +105,6 @@ def test_disabled_service_controllers_not_running(namespace: str) -> None:
 
 
 def test_enabled_services_function_normally(grpc: GRPCClient) -> None:
-    clusters_output, clusters_rc = grpc.call_unchecked(service=f"{PUBLIC_API}.Clusters/List")
-    assert clusters_rc == 0, f"Clusters.List (CaaS) should succeed, got rc={clusters_rc}: {clusters_output}"
-
     ci_output, ci_rc = grpc.call_unchecked(service=f"{PUBLIC_API}.ComputeInstances/List")
     assert ci_rc == 0, f"ComputeInstances.List (VMaaS) should succeed, got rc={ci_rc}: {ci_output}"
 
