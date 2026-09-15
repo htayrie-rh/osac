@@ -50,6 +50,11 @@ type PrivateHostTypesServer struct {
 	serviceFlags *services.Flags
 }
 
+const (
+	bareMetalHostTypesFilter = "this.interfaces.size() > 0"
+	virtualHostTypesFilter   = "this.interfaces.size() == 0"
+)
+
 func NewPrivateHostTypesServer() *PrivateHostTypesServerBuilder {
 	return &PrivateHostTypesServerBuilder{}
 }
@@ -172,17 +177,28 @@ func hostTypesPredicate(flags *services.Flags) string {
 		return "false"
 	}
 	if flags.BMaaS {
-		return "this.interfaces.size() > 0"
+		return bareMetalHostTypesFilter
 	}
-	return "this.interfaces.size() == 0"
+	return virtualHostTypesFilter
 }
 
 func hostTypeEnabled(object *privatev1.HostType, flags *services.Flags) bool {
 	if flags == nil || (flags.VMaaS && flags.BMaaS) {
 		return true
 	}
-	hasInterfaces := len(object.GetInterfaces()) > 0
-	return (flags.BMaaS && hasInterfaces) || (flags.VMaaS && !hasInterfaces)
+	return (flags.BMaaS && isBareMetalHostType(object)) ||
+		(flags.VMaaS && isVirtualHostType(object))
+}
+
+// HostType interfaces describe physical NICs. The API contract uses a non-empty
+// interfaces list to identify bare-metal host types; an empty list identifies
+// virtual machine host types, whose NICs come from the overlay network.
+func isBareMetalHostType(object *privatev1.HostType) bool {
+	return len(object.GetInterfaces()) > 0
+}
+
+func isVirtualHostType(object *privatev1.HostType) bool {
+	return !isBareMetalHostType(object)
 }
 
 func (s *PrivateHostTypesServer) Create(ctx context.Context,
