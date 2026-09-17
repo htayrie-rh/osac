@@ -21,6 +21,7 @@ All of this adds up to an easy-to-use, on-demand solution that cloud providers c
 
 * [Console Access](MGMT-22670-console-access.md) - Serial console access for compute instances
 * [Netris CaaS Networking](netris-caas-networking.md) - Network traffic flow with Netris backend
+* [Per-Service Enablement](OSAC-4683-per-service-enablement.md) - Configure and verify enabled OSAC service tiers
 
 ## Developer Guides
 
