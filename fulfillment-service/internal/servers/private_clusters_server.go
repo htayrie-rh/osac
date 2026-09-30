@@ -1417,7 +1417,7 @@ func (s *PrivateClustersServer) resolveClusterNodeSets(ctx context.Context, clus
 		if host != nil {
 			node.SetHostType(privatev1.HostTypeReference_builder{
 				Id: host.GetId(), Name: host.GetMetadata().GetName(),
-				Shared: host.GetMetadata().GetTenant() == auth.SharedTenant, Project: host.GetMetadata().GetProject(),
+				Tenant: host.GetMetadata().GetTenant(), Project: host.GetMetadata().GetProject(),
 			}.Build())
 		}
 
@@ -1446,7 +1446,7 @@ func (s *PrivateClustersServer) resolveClusterNodeSets(ctx context.Context, clus
 }
 
 // resolveCatalogItem finds the Cluster's published Catalog Item in the selected tenant/project
-// or shared scope, then finds the item's Template under the item's ownership. It applies locked
+// scope, then finds the item's Template under the item's ownership. It applies locked
 // and editable field and parameter rules and returns that Template for defaults.
 func (s *PrivateClustersServer) resolveCatalogItem(ctx context.Context,
 	cluster *privatev1.Cluster) (*privatev1.ClusterTemplate, error) {

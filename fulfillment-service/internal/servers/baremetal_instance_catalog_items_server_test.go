@@ -459,7 +459,7 @@ var _ = Describe("Catalog publication and references", func() {
 		Expect(err).ToNot(HaveOccurred())
 		request := publicv1.BareMetalInstanceCatalogItemsCreateRequest_builder{Object: publicv1.BareMetalInstanceCatalogItem_builder{
 			Metadata: publicv1.Metadata_builder{Name: "offering"}.Build(), Title: "Offering", Published: true,
-			Template: publicv1.BareMetalInstanceTemplateReference_builder{Name: "my-bare-metal-template", Shared: true}.Build(),
+			Template: publicv1.BareMetalInstanceTemplateReference_builder{Name: "my-bare-metal-template", Tenant: "shared"}.Build(),
 			Fields:   publicv1.BareMetalInstanceCatalogItemFields_builder{DiskImage: publicv1.DiskImageReferenceFieldPolicy_builder{Locked: publicv1.DiskImageReference_builder{Id: dependency.GetId()}.Build()}.Build()}.Build(),
 		}.Build()}.Build()
 		original := proto.Clone(request)

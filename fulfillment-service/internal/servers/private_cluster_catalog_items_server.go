@@ -228,7 +228,7 @@ func (s *PrivateClusterCatalogItemsServer) prepareCatalogItemCandidate(
 }
 
 // validateAndCanonicalizeTemplate finds the Template named by this Catalog Item. A name lookup
-// starts in the item's tenant/project; project or shared selectors can choose another scope.
+// starts in the item's tenant/project; explicit tenant or project selectors can choose another scope.
 // It stores the Template's actual ID/name/scope, checks parameter policies against that
 // Template, and forbids changing the Template on Update. The resolved Template also supplies
 // the allowed HostTypes for node-set policies.

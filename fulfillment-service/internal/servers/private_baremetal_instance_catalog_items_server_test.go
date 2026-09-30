@@ -104,7 +104,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			Expect(object.GetId()).ToNot(BeEmpty())
 			Expect(object.GetTitle()).To(Equal("My catalog item"))
 			Expect(object.GetTemplate().GetId()).To(Equal("my-shared-template-id"))
-			Expect(object.GetTemplate().GetShared()).To(BeTrue())
+			Expect(object.GetTemplate().GetTenant()).To(Equal("shared"))
 			Expect(object.GetPublished()).To(BeTrue())
 			Expect(object.GetMetadata().GetTenant()).To(Equal(testTenant))
 		})
@@ -151,19 +151,21 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			Expect(err).To(MatchError(ContainSubstring("obsolete")))
 		})
 
-		It("rejects a DiskImage default owned by another tenant on Create", func() {
+		It("allows an explicitly selected DiskImage default owned by another tenant on Create", func() {
 			createTenant("other-tenant")
 			createAvailableDiskImageInTenant("other-tenant-policy-image", "other-tenant-policy-image", "other-tenant")
 
-			_, err := server.Create(ctx, privatev1.BareMetalInstanceCatalogItemsCreateRequest_builder{Object: privatev1.BareMetalInstanceCatalogItem_builder{
+			response, err := server.Create(ctx, privatev1.BareMetalInstanceCatalogItemsCreateRequest_builder{Object: privatev1.BareMetalInstanceCatalogItem_builder{
 				Metadata: privatev1.Metadata_builder{Name: "cross-tenant-policy-catalog"}.Build(),
 				Template: privatev1.BareMetalInstanceTemplateReference_builder{Id: "my-template-id"}.Build(),
 				Fields: privatev1.BareMetalInstanceCatalogItemFields_builder{DiskImage: privatev1.DiskImageReferenceFieldPolicy_builder{
-					Editable: privatev1.EditableDiskImageReferenceField_builder{DefaultValue: privatev1.DiskImageReference_builder{Id: "other-tenant-policy-image"}.Build()}.Build(),
+					Editable: privatev1.EditableDiskImageReferenceField_builder{DefaultValue: privatev1.DiskImageReference_builder{Id: "other-tenant-policy-image", Tenant: "other-tenant"}.Build()}.Build(),
 				}.Build()}.Build(),
 			}.Build()}.Build())
-			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-			Expect(err).To(MatchError(ContainSubstring("owning tenant or shared tenant")))
+			Expect(err).ToNot(HaveOccurred())
+			resolved := response.GetObject().GetFields().GetDiskImage().GetEditable().GetDefaultValue()
+			Expect(resolved.GetId()).To(Equal("other-tenant-policy-image"))
+			Expect(resolved.GetTenant()).To(Equal("other-tenant"))
 		})
 
 		DescribeTable("validates DiskImage defaults on fields updates", func(name string, lifecycle privatev1.DiskImageLifecycle, expectedCode grpccodes.Code, warning bool) {
@@ -200,7 +202,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			Entry("rejects an obsolete image", "obsolete", privatev1.DiskImageLifecycle_DISK_IMAGE_LIFECYCLE_OBSOLETE, grpccodes.FailedPrecondition, false),
 		)
 
-		It("rejects a DiskImage default owned by another tenant on fields update", func() {
+		It("allows an explicitly selected DiskImage default owned by another tenant on fields update", func() {
 			createResponse, err := server.Create(ctx, privatev1.BareMetalInstanceCatalogItemsCreateRequest_builder{Object: privatev1.BareMetalInstanceCatalogItem_builder{
 				Metadata: privatev1.Metadata_builder{Name: "cross-tenant-update-policy-catalog"}.Build(),
 				Template: privatev1.BareMetalInstanceTemplateReference_builder{Id: "my-template-id"}.Build(),
@@ -209,17 +211,19 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			createTenant("other-update-tenant")
 			createAvailableDiskImageInTenant("other-tenant-update-policy-image", "other-tenant-update-policy-image", "other-update-tenant")
 
-			_, err = server.Update(ctx, privatev1.BareMetalInstanceCatalogItemsUpdateRequest_builder{
+			updated, err := server.Update(ctx, privatev1.BareMetalInstanceCatalogItemsUpdateRequest_builder{
 				Object: privatev1.BareMetalInstanceCatalogItem_builder{
 					Id: createResponse.GetObject().GetId(),
 					Fields: privatev1.BareMetalInstanceCatalogItemFields_builder{DiskImage: privatev1.DiskImageReferenceFieldPolicy_builder{
-						Editable: privatev1.EditableDiskImageReferenceField_builder{DefaultValue: privatev1.DiskImageReference_builder{Id: "other-tenant-update-policy-image"}.Build()}.Build(),
+						Editable: privatev1.EditableDiskImageReferenceField_builder{DefaultValue: privatev1.DiskImageReference_builder{Id: "other-tenant-update-policy-image", Tenant: "other-update-tenant"}.Build()}.Build(),
 					}.Build()}.Build(),
 				}.Build(),
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"fields"}},
 			}.Build())
-			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-			Expect(err).To(MatchError(ContainSubstring("owning tenant or shared tenant")))
+			Expect(err).ToNot(HaveOccurred())
+			resolved := updated.GetObject().GetFields().GetDiskImage().GetEditable().GetDefaultValue()
+			Expect(resolved.GetId()).To(Equal("other-tenant-update-policy-image"))
+			Expect(resolved.GetTenant()).To(Equal("other-update-tenant"))
 		})
 
 		It("Lists objects", func() {

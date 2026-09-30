@@ -40,12 +40,12 @@ func (e *errRefNotFound) IsNotFound() bool {
 // NewDAOLookupFunc creates a ReferenceLookupFunc backed by a GenericDAO. It queries the DAO
 // using a CEL filter that matches by id or metadata.name and returns the resolved reference metadata.
 func NewDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O]) ReferenceLookupFunc {
-	return newDAOLookupFunc(d, false, false)
+	return newDAOLookupFunc(d, true, false)
 }
 
 // NewScopedDAOLookupFunc creates a DAO lookup that additionally constrains references to an
-// explicitly supplied tenant/project. If the caller has no explicit tenant, it retains the
-// visibility-based behavior of NewDAOLookupFunc.
+// explicitly supplied tenant/project. Unscoped ID lookups rely on DAO visibility because IDs
+// are globally unique.
 func NewScopedDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O]) ReferenceLookupFunc {
 	return newDAOLookupFunc(d, true, false)
 }
@@ -63,14 +63,13 @@ func newDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O], scopeExplicitTenant, p
 		default:
 			return nil, &errRefNotFound{identifier: "(empty)"}
 		}
-		// When the caller supplies an explicit scope, keep local references inside it. Requests
-		// without metadata retain the existing visibility-based behavior so generic default-tenant
-		// assignment remains compatible.
+		// Apply tenant and project selectors independently. ID-only references without explicit
+		// selectors retain visibility-based lookup because IDs are globally unique.
 		if scopeExplicitTenant && tenant != "" {
-			filter += fmt.Sprintf(
-				" && this.metadata.tenant == %s && this.metadata.project == %s",
-				strconv.Quote(tenant), strconv.Quote(project),
-			)
+			filter += fmt.Sprintf(" && this.metadata.tenant == %s", strconv.Quote(tenant))
+		}
+		if project != "" {
+			filter += fmt.Sprintf(" && this.metadata.project == %s", strconv.Quote(project))
 		}
 		if publishedOnly {
 			filter = PublishedFilter(filter)

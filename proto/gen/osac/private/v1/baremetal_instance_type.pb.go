@@ -384,8 +384,9 @@ type BareMetalInstanceSpec struct {
 	// back to the catalog item's template host_type.
 	InstanceType *BareMetalInstanceTypeReference `protobuf:"bytes,11,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
 	// Reference to a DiskImage resource, selected by ID or name. The reference is immutable after creation.
-	// Catalog items can provide a default when callers omit it. The reference must resolve to an image in the instance
-	// tenant or shared tenant. Available images are accepted, deprecated images are accepted with a warning, and
+	// Catalog items can provide a default when callers omit it. Use tenant/project to select a scope; a name-only
+	// reference with neither selector prefers the instance tenant, then shared. An ID-only reference may select any
+	// image visible to the caller. Available images are accepted, deprecated images are accepted with a warning, and
 	// obsolete images are rejected.
 	DiskImage *DiskImageReference `protobuf:"bytes,12,opt,name=disk_image,json=diskImage,proto3" json:"disk_image,omitempty"`
 	// Reference to a Secret containing user data for the bare metal instance.
@@ -735,8 +736,9 @@ type BareMetalInstanceSpec_builder struct {
 	// back to the catalog item's template host_type.
 	InstanceType *BareMetalInstanceTypeReference
 	// Reference to a DiskImage resource, selected by ID or name. The reference is immutable after creation.
-	// Catalog items can provide a default when callers omit it. The reference must resolve to an image in the instance
-	// tenant or shared tenant. Available images are accepted, deprecated images are accepted with a warning, and
+	// Catalog items can provide a default when callers omit it. Use tenant/project to select a scope; a name-only
+	// reference with neither selector prefers the instance tenant, then shared. An ID-only reference may select any
+	// image visible to the caller. Available images are accepted, deprecated images are accepted with a warning, and
 	// obsolete images are rejected.
 	DiskImage *DiskImageReference
 	// Reference to a Secret containing user data for the bare metal instance.

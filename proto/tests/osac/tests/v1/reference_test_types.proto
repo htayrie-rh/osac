@@ -22,7 +22,9 @@ message TestTargetReference {
   string id = 1;
   string name = 2;
   string project = 3;
-  bool shared = 4;
+  reserved 4;
+  reserved "shared";
+  string tenant = 5;
 }
 
 // Local reference for same-tenant/project lookups.
@@ -57,6 +59,27 @@ message TestRefOneofSpec {
     TestTargetLocalReference compute_instance = 1;
     TestOtherTargetLocalReference cluster = 2;
   }
+}
+
+message TestRefNestedContainer {
+  TestTargetReference target = 1;
+}
+
+message TestRefSelection {
+  oneof target {
+    TestTargetReference reference = 1;
+    string value = 2;
+  }
+}
+
+message TestRefContainers {
+  TestTargetReference target = 1;
+  repeated TestTargetReference targets = 2;
+  map<string, TestTargetReference> targets_by_name = 3;
+  TestRefNestedContainer nested = 4;
+  TestRefSelection selection = 5;
+  Metadata metadata = 6;
+  TestTargetLocalReference local_target = 7;
 }
 
 // buf:lint:ignore OSAC_OBJECT_SHAPE

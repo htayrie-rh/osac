@@ -900,6 +900,69 @@ var _ = Describe("Reference validator", func() {
 			Expect(capturedProject).To(Equal("my-project"))
 		})
 
+		It("Keeps ID-only local references in the owner tenant and project", func() {
+			var capturedTenant, capturedProject string
+			validator.Register("osac.tests.v1.TestTargetLocalReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant = tenant
+				capturedProject = project
+				return &ResolvedRef{ID: id, Tenant: tenant, Project: project}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Metadata: testsv1.Metadata_builder{Tenant: "my-tenant", Project: "my-project"}.Build(),
+					Spec: testsv1.TestRefSpec_builder{
+						LocalTarget: testsv1.TestTargetLocalReference_builder{Id: "target-id"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err := validator.UnaryServer(
+				context.Background(),
+				request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(Equal("my-tenant"))
+			Expect(capturedProject).To(Equal("my-project"))
+		})
+
+		It("Uses visibility for an ID-only full reference without tenant or project", func() {
+			var capturedTenant, capturedProject string
+			validator.Register("osac.tests.v1.TestTargetReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant = tenant
+				capturedProject = project
+				return &ResolvedRef{ID: id, Tenant: "tenant-b", Name: name}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Metadata: testsv1.Metadata_builder{Tenant: "tenant-a", Project: "project-a"}.Build(),
+					Spec: testsv1.TestRefSpec_builder{
+						Target: testsv1.TestTargetReference_builder{Id: "target-id"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err := validator.UnaryServer(
+				context.Background(),
+				request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(BeEmpty())
+			Expect(capturedProject).To(BeEmpty())
+			Expect(request.GetObject().GetSpec().GetTarget().GetTenant()).To(Equal("tenant-b"))
+		})
+
 		It("Uses explicit project from full reference when present", func() {
 			var capturedProject string
 			validator.Register("osac.tests.v1.TestTargetReference", func(
@@ -940,7 +1003,7 @@ var _ = Describe("Reference validator", func() {
 			Expect(capturedProject).To(Equal("other-project"))
 		})
 
-		It("Uses shared tenant when shared flag is set on full reference", func() {
+		It("Uses explicit tenant from full reference", func() {
 			var capturedTenant string
 			validator.Register("osac.tests.v1.TestTargetReference", func(
 				ctx context.Context, tenant, project, id, name string,
@@ -958,8 +1021,8 @@ var _ = Describe("Reference validator", func() {
 					}.Build(),
 					Spec: testsv1.TestRefSpec_builder{
 						Target: testsv1.TestTargetReference_builder{
-							Name:   "shared-target",
-							Shared: true,
+							Name:   "target-in-other-tenant",
+							Tenant: "tenant-b",
 						}.Build(),
 					}.Build(),
 				}.Build(),
@@ -977,7 +1040,8 @@ var _ = Describe("Reference validator", func() {
 			)
 
 			Expect(err).ToNot(HaveOccurred())
-			Expect(capturedTenant).To(Equal("shared"))
+			Expect(capturedTenant).To(Equal("tenant-b"))
+			Expect(request.GetObject().GetSpec().GetTarget().GetTenant()).To(Equal("tenant-b"))
 		})
 	})
 

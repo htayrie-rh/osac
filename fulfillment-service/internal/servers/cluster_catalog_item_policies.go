@@ -303,7 +303,7 @@ func validateClusterCatalogItemNetworkAttachmentPolicy(
 
 // validateClusterCatalogItemNodeSetPolicy checks HostType references supplied by the Catalog Item
 // or inherited from its Template. A supplied name is looked up from the Catalog Item's
-// tenant/project or explicit shared scope. An omitted HostType inherits the corresponding
+// tenant/project or explicit tenant scope. An omitted HostType inherits the corresponding
 // Template node set's reference, and a concrete network policy requires each effective HostType
 // to provide a fabric interface. Resolved references are stored in the Catalog Item, while the
 // Template remains unchanged. Dependency locks are held until the request transaction finishes.

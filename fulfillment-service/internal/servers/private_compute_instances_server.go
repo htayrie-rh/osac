@@ -1185,7 +1185,7 @@ func (s *PrivateComputeInstancesServer) validateNetworkReferencesState(
 }
 
 // resolveCatalogItem finds the VM's published Catalog Item in the VM's selected tenant/project
-// or shared scope, then finds the item's Template under the item's ownership. It applies locked
+// scope, then finds the item's Template under the item's ownership. It applies locked
 // and editable field and parameter rules to the new VM and returns that Template for defaults.
 func (s *PrivateComputeInstancesServer) resolveCatalogItem(
 	ctx context.Context, ci *privatev1.ComputeInstance,

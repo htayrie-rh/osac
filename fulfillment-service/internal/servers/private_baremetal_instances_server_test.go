@@ -303,7 +303,7 @@ var _ = Describe("Private bare metal instances server", func() {
 						Metadata: privatev1.Metadata_builder{Name: fmt.Sprintf("test-%s", uuid.NewString()[:8])}.Build(),
 						Spec: privatev1.BareMetalInstanceSpec_builder{
 							CatalogItem:  privatev1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemID}.Build(),
-							DiskImage:    privatev1.DiskImageReference_builder{Id: "other-tenant-bmi-disk-image"}.Build(),
+							DiskImage:    privatev1.DiskImageReference_builder{Id: "other-tenant-bmi-disk-image", Tenant: otherTenant}.Build(),
 							SshPublicKey: new(testSSHPublicKey),
 						}.Build(),
 					}.Build(),
@@ -556,7 +556,7 @@ var _ = Describe("Private bare metal instances server", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(response.GetObject().GetSpec().GetDiskImage().GetId()).To(Equal("bmi-disk-image-id"))
 			Expect(response.GetObject().GetSpec().GetDiskImage().GetName()).To(Equal("bmi-disk-image"))
-			Expect(response.GetObject().GetSpec().GetDiskImage().GetShared()).To(BeFalse())
+			Expect(response.GetObject().GetSpec().GetDiskImage().GetTenant()).To(Equal(testTenant))
 		})
 
 		It("Preserves disk_image ID precedence over a name collision", func() {

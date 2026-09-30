@@ -464,7 +464,17 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 	}
 
 	start := time.Now()
-	resolved, err := lookupFunc(ctx, refTenant, refProject, id, name)
+	lookupTenant := refTenant
+	lookupProject := refProject
+	if id != "" {
+		if tenantField := refMsg.Descriptor().Fields().ByName("tenant"); tenantField != nil && refMsg.Get(tenantField).String() == "" {
+			lookupTenant = ""
+		}
+		if projectField := refMsg.Descriptor().Fields().ByName("project"); projectField != nil && refMsg.Get(projectField).String() == "" {
+			lookupProject = ""
+		}
+	}
+	resolved, err := lookupFunc(ctx, lookupTenant, lookupProject, id, name)
 	elapsed := time.Since(start)
 
 	v.recordDuration(resourceType, elapsed)
@@ -511,6 +521,10 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 	}
 	if name == "" && resolved.Name != "" {
 		refMsg.Set(nameField, protoreflect.ValueOfString(resolved.Name))
+	}
+	tenantField := refMsg.Descriptor().Fields().ByName("tenant")
+	if tenantField != nil && resolved.Tenant != "" {
+		refMsg.Set(tenantField, protoreflect.ValueOfString(resolved.Tenant))
 	}
 
 	if id != "" && name != "" && (resolved.ID != id || resolved.Name != name) {
@@ -567,9 +581,11 @@ func resolveTenantProject(refMsg protoreflect.Message, fullName protoreflect.Ful
 	tenant := callerTenant
 	project := callerProject
 
-	sharedField := refMsg.Descriptor().Fields().ByName("shared")
-	if sharedField != nil && refMsg.Get(sharedField).Bool() {
-		tenant = "shared"
+	tenantField := refMsg.Descriptor().Fields().ByName("tenant")
+	if tenantField != nil {
+		if explicitTenant := refMsg.Get(tenantField).String(); explicitTenant != "" {
+			tenant = explicitTenant
+		}
 	}
 
 	projectField := refMsg.Descriptor().Fields().ByName("project")

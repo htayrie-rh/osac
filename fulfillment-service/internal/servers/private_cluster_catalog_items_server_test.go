@@ -147,7 +147,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 			Expect(object.GetId()).ToNot(BeEmpty())
 			Expect(object.GetTitle()).To(Equal("My cluster catalog item"))
 			Expect(object.GetTemplate().GetId()).To(Equal("my-shared-template-id"))
-			Expect(object.GetTemplate().GetShared()).To(BeTrue())
+			Expect(object.GetTemplate().GetTenant()).To(Equal("shared"))
 			Expect(object.GetPublished()).To(BeTrue())
 			Expect(object.GetMetadata().GetTenant()).To(Equal(testTenant))
 		})

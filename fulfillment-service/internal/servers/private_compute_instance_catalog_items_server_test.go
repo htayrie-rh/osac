@@ -185,7 +185,7 @@ var _ = Describe("Private compute instance catalog items server", func() {
 			Expect(object.GetId()).ToNot(BeEmpty())
 			Expect(object.GetTitle()).To(Equal("My CI catalog item"))
 			Expect(object.GetTemplate().GetId()).To(Equal("my-ci-shared-template-id"))
-			Expect(object.GetTemplate().GetShared()).To(BeTrue())
+			Expect(object.GetTemplate().GetTenant()).To(Equal("shared"))
 			Expect(object.GetPublished()).To(BeTrue())
 			Expect(object.GetMetadata().GetTenant()).To(Equal(testTenant))
 		})
@@ -1270,15 +1270,17 @@ var _ = Describe("Private compute instance catalog items server", func() {
 })
 
 var _ = Describe("Catalog publication and references", func() {
-	It("rejects cross-tenant full dependencies even for an author with total visibility", func() {
+	It("allows an explicitly selected cross-tenant dependency when the caller can see it", func() {
 		Expect(seedComputeCatalogItemTemplate(ctx, testTenant, "", "tenant-template")).To(Succeed())
 		server, err := NewPrivateComputeInstanceCatalogItemsServer().SetLogger(logger).SetAttributionLogic(attribution).SetTenancyLogic(tenancy).Build()
 		Expect(err).ToNot(HaveOccurred())
-		_, err = server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{Object: privatev1.ComputeInstanceCatalogItem_builder{
-			Metadata: privatev1.Metadata_builder{Name: "shared-offering", Tenant: auth.SharedTenant}.Build(), Title: "Shared",
-			Template: privatev1.ComputeInstanceTemplateReference_builder{Id: "tenant-template"}.Build(),
+		response, err := server.Create(ctx, privatev1.ComputeInstanceCatalogItemsCreateRequest_builder{Object: privatev1.ComputeInstanceCatalogItem_builder{
+			Metadata: privatev1.Metadata_builder{Name: fmt.Sprintf("shared-offering-%s", uuid.NewString()[:8]), Tenant: auth.SharedTenant}.Build(), Title: "Shared",
+			Template: privatev1.ComputeInstanceTemplateReference_builder{Id: "tenant-template", Tenant: testTenant}.Build(),
 		}.Build()}.Build())
-		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
+		Expect(err).ToNot(HaveOccurred())
+		Expect(response.GetObject().GetTemplate().GetTenant()).To(Equal(testTenant))
+		Expect(response.GetObject().GetTemplate().GetId()).To(Equal("tenant-template"))
 	})
 })
 

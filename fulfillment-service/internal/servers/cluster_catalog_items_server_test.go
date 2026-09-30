@@ -489,7 +489,7 @@ var _ = Describe("Catalog publication and references", func() {
 		Expect(err).ToNot(HaveOccurred())
 		request := publicv1.ClusterCatalogItemsCreateRequest_builder{Object: publicv1.ClusterCatalogItem_builder{
 			Metadata: publicv1.Metadata_builder{Name: "offering"}.Build(), Title: "Offering", Published: true,
-			Template: publicv1.ClusterTemplateReference_builder{Name: "my-cluster-template", Shared: true}.Build(),
+			Template: publicv1.ClusterTemplateReference_builder{Name: "my-cluster-template", Tenant: "shared"}.Build(),
 			Fields:   publicv1.ClusterCatalogItemFields_builder{Version: publicv1.ClusterVersionReferenceFieldPolicy_builder{Locked: publicv1.ClusterVersionReference_builder{Id: dependency.GetId()}.Build()}.Build()}.Build(),
 		}.Build()}.Build()
 		original := proto.Clone(request)
