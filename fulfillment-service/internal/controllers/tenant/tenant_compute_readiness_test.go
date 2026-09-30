@@ -188,6 +188,29 @@ var _ = Describe("Tenant compute infrastructure readiness", func() {
 		observe(clientWith(object(osacv1alpha1.TenantPhaseReady), duplicate))
 		check(unknown, "InfrastructureStatusUnknown")
 	})
+	It("reports missing tenant identity as unknown without reading hubs", func() {
+		tenant.GetMetadata().SetName("")
+		check(unknown, "InfrastructureStatusUnknown")
+	})
+	DescribeTable("reports incomplete hub configuration as unknown", func(missing string) {
+		entry := &controllers.HubEntry{Namespace: "hub-ns", Client: clientWith(object(osacv1alpha1.TenantPhaseReady))}
+		switch missing {
+		case "entry":
+			entry = nil
+		case "client":
+			entry.Client = nil
+		case "namespace":
+			entry.Namespace = ""
+		}
+		hubs.EXPECT().List(gomock.Any(), gomock.Any()).Return(privatev1.HubsListResponse_builder{Items: []*privatev1.Hub{privatev1.Hub_builder{Id: "hub"}.Build()}, Size: 1, Total: 1}.Build(), nil)
+		cache.EXPECT().Get(gomock.Any(), "hub").Return(entry, nil)
+		check(unknown, "InfrastructureStatusUnknown")
+	}, Entry("missing entry", "entry"), Entry("missing client", "client"), Entry("missing namespace", "namespace"))
+	DescribeTable("does not claim readiness from inconsistent hub pagination", func(size, total int32) {
+		hubs.EXPECT().List(gomock.Any(), gomock.Any()).Return(privatev1.HubsListResponse_builder{Items: []*privatev1.Hub{privatev1.Hub_builder{Id: "hub"}.Build()}, Size: size, Total: total}.Build(), nil)
+		cache.EXPECT().Get(gomock.Any(), "hub").Return(&controllers.HubEntry{Namespace: "hub-ns", Client: clientWith(object(osacv1alpha1.TenantPhaseReady))}, nil)
+		check(unknown, "InfrastructureStatusUnknown")
+	}, Entry("negative size", int32(-1), int32(1)), Entry("size differs from items", int32(0), int32(1)), Entry("total smaller than page", int32(1), int32(0)))
 	It("reports an inaccessible hub as unknown", func() {
 		hubs.EXPECT().List(gomock.Any(), gomock.Any()).Return(privatev1.HubsListResponse_builder{Items: []*privatev1.Hub{privatev1.Hub_builder{Id: "hub"}.Build()}, Size: 1, Total: 1}.Build(), nil)
 		cache.EXPECT().Get(gomock.Any(), "hub").Return(nil, errors.New("private endpoint details"))
