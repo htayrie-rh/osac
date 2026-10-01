@@ -81,7 +81,9 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 			},
 		}}
 		Expect(tool.KubeClient().Create(ctx, duplicate)).To(Succeed())
-		DeferCleanup(tool.KubeClient().Delete, ctx, duplicate)
+		DeferCleanup(func(cleanupCtx context.Context) {
+			_ = tool.KubeClient().Delete(cleanupCtx, duplicate)
+		})
 		expectComputeCondition(privatev1.ConditionStatus_CONDITION_STATUS_UNSPECIFIED, "InfrastructureStatusUnknown", 15*time.Second)
 
 		By("Removing the ambiguity and changing Tenant status to trigger feedback")
