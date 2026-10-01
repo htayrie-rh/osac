@@ -49,7 +49,8 @@ func newTenantCR(tenantID, namespace, name string, deletionTimestamp *metav1.Tim
 			Namespace: namespace,
 			Name:      name,
 			Labels: map[string]string{
-				labels.TenantUuid: tenantID,
+				labels.TenantUuid: name,
+				labels.TenantID:   tenantID,
 			},
 		},
 	}
@@ -282,14 +283,16 @@ var _ = Describe("run", func() {
 				Expect(fakeClient1.List(ctx, list1)).To(Succeed())
 				Expect(list1.Items).To(HaveLen(1))
 				Expect(list1.Items[0].Name).To(Equal(tenantName))
-				Expect(list1.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantID))
+				Expect(list1.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantName))
+				Expect(list1.Items[0].Labels[labels.TenantID]).To(Equal(tenantID))
 				Expect(list1.Items[0].Namespace).To(Equal(namespace1))
 
 				list2 := &osacv1alpha1.TenantList{}
 				Expect(fakeClient2.List(ctx, list2)).To(Succeed())
 				Expect(list2.Items).To(HaveLen(1))
 				Expect(list2.Items[0].Name).To(Equal(tenantName))
-				Expect(list2.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantID))
+				Expect(list2.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantName))
+				Expect(list2.Items[0].Labels[labels.TenantID]).To(Equal(tenantID))
 				Expect(list2.Items[0].Namespace).To(Equal(namespace2))
 
 				ns1 := &corev1.Namespace{}
@@ -409,6 +412,7 @@ var _ = Describe("run", func() {
 					Name:      tenantID,
 				}, patched)).To(Succeed())
 				Expect(patched.Labels).To(HaveKeyWithValue(labels.TenantUuid, tenantID))
+				Expect(patched.Labels).To(HaveKeyWithValue(labels.TenantID, tenantID))
 			})
 		})
 
@@ -627,6 +631,7 @@ var _ = Describe("run", func() {
 				Expect(fakeClient.List(ctx, list)).To(Succeed())
 				Expect(list.Items).To(HaveLen(1))
 				Expect(list.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantID))
+				Expect(list.Items[0].Labels[labels.TenantID]).To(Equal(tenantID))
 
 				ns := &corev1.Namespace{}
 				Expect(fakeClient.Get(ctx, clnt.ObjectKey{Name: tenantID}, ns)).To(Succeed())

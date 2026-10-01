@@ -44,8 +44,8 @@ const (
 )
 
 var (
-	// osacTenantIDLabel stores the fulfillment-service identifier of the tenant.
-	osacTenantIDLabel string = fmt.Sprintf("%s/tenant-uuid", osacPrefix)
+	// osacTenantIDLabel stores the immutable fulfillment-service identifier of the tenant.
+	osacTenantIDLabel string = fmt.Sprintf("%s/tenant-id", osacPrefix)
 
 	// osacTenantRefLabel the label used to reference the tenant object
 	osacTenantRefLabel string = fmt.Sprintf("%s/tenant-ref", osacPrefix)

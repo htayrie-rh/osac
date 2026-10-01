@@ -119,7 +119,7 @@ func (r *function) readTenantInfrastructure(ctx context.Context, hubID, tenantID
 		return nil, fmt.Errorf("hub %q has no configured client or namespace", hubID)
 	}
 	objects := &osacv1alpha1.TenantList{}
-	if err := entry.Client.List(ctx, objects, clnt.InNamespace(entry.Namespace), clnt.MatchingLabels{labels.TenantUuid: tenantID}); err != nil {
+	if err := entry.Client.List(ctx, objects, clnt.InNamespace(entry.Namespace), clnt.MatchingLabels{labels.TenantID: tenantID}); err != nil {
 		return nil, err
 	}
 	if len(objects.Items) == 0 {
