@@ -267,7 +267,7 @@ var _ = Describe("run", func() {
 				tenant := privatev1.Tenant_builder{
 					Id: tenantID,
 					Metadata: privatev1.Metadata_builder{
-						Name:       tenantID,
+						Name:       tenantName,
 						Finalizers: []string{finalizers.Controller},
 						Tenant:     tenantName,
 					}.Build(),
@@ -281,23 +281,25 @@ var _ = Describe("run", func() {
 				list1 := &osacv1alpha1.TenantList{}
 				Expect(fakeClient1.List(ctx, list1)).To(Succeed())
 				Expect(list1.Items).To(HaveLen(1))
+				Expect(list1.Items[0].Name).To(Equal(tenantName))
 				Expect(list1.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantID))
 				Expect(list1.Items[0].Namespace).To(Equal(namespace1))
 
 				list2 := &osacv1alpha1.TenantList{}
 				Expect(fakeClient2.List(ctx, list2)).To(Succeed())
 				Expect(list2.Items).To(HaveLen(1))
+				Expect(list2.Items[0].Name).To(Equal(tenantName))
 				Expect(list2.Items[0].Labels[labels.TenantUuid]).To(Equal(tenantID))
 				Expect(list2.Items[0].Namespace).To(Equal(namespace2))
 
 				ns1 := &corev1.Namespace{}
-				Expect(fakeClient1.Get(ctx, clnt.ObjectKey{Name: tenantID}, ns1)).To(Succeed())
-				Expect(ns1.Labels[labels.TenantRef]).To(Equal(tenantID))
+				Expect(fakeClient1.Get(ctx, clnt.ObjectKey{Name: tenantName}, ns1)).To(Succeed())
+				Expect(ns1.Labels[labels.TenantRef]).To(Equal(tenantName))
 				Expect(ns1.Labels[labels.Project]).To(Equal(namespace1))
 
 				ns2 := &corev1.Namespace{}
-				Expect(fakeClient2.Get(ctx, clnt.ObjectKey{Name: tenantID}, ns2)).To(Succeed())
-				Expect(ns2.Labels[labels.TenantRef]).To(Equal(tenantID))
+				Expect(fakeClient2.Get(ctx, clnt.ObjectKey{Name: tenantName}, ns2)).To(Succeed())
+				Expect(ns2.Labels[labels.TenantRef]).To(Equal(tenantName))
 				Expect(ns2.Labels[labels.Project]).To(Equal(namespace2))
 			})
 		})
