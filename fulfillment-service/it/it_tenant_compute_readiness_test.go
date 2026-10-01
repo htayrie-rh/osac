@@ -43,7 +43,8 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 		Eventually(func(g Gomega) {
 			object := &osacv1alpha1.Tenant{}
 			g.Expect(tool.KubeClient().Get(ctx, key, object)).To(Succeed())
-			g.Expect(object.Labels).To(HaveKeyWithValue(labels.TenantUuid, id))
+			g.Expect(object.Labels).To(HaveKeyWithValue(labels.TenantUuid, name))
+			g.Expect(object.Labels).To(HaveKeyWithValue(labels.TenantID, id))
 		}, time.Minute, time.Second).Should(Succeed())
 
 		By("Marking the Tenant CR ready and signaling the status feedback")
@@ -83,7 +84,10 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 		duplicate := &osacv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
 			Name:      name + "-duplicate",
 			Namespace: hubNamespace,
-			Labels:    map[string]string{labels.TenantUuid: id},
+			Labels: map[string]string{
+				labels.TenantUuid: name,
+				labels.TenantID:   id,
+			},
 			Annotations: map[string]string{
 				"osac.openshift.io/tenant":          name,
 				"osac.openshift.io/owner-reference": id,
@@ -100,7 +104,7 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 		By("Removing the ambiguity and changing Tenant status to trigger feedback")
 		Eventually(func(g Gomega) {
 			g.Expect(tool.KubeClient().Get(ctx, crclient.ObjectKeyFromObject(duplicate), duplicate)).To(Succeed())
-			duplicate.Labels[labels.TenantUuid] = "unrelated-tenant-id"
+			duplicate.Labels[labels.TenantID] = "unrelated-tenant-id"
 			g.Expect(tool.KubeClient().Update(ctx, duplicate)).To(Succeed())
 		}, time.Minute, time.Second).Should(Succeed())
 

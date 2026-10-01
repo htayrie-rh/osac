@@ -80,7 +80,7 @@ var _ = Describe("Tenant compute infrastructure readiness", func() {
 	}
 	object := func(phase osacv1alpha1.TenantPhaseType) *osacv1alpha1.Tenant {
 		return &osacv1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
-			Name: "tenant-a", Namespace: "hub-ns", Labels: map[string]string{labels.TenantUuid: "api-id"},
+			Name: "tenant-a", Namespace: "hub-ns", Labels: map[string]string{labels.TenantID: "api-id"},
 		}, Status: osacv1alpha1.TenantStatus{Phase: phase}}
 	}
 	BeforeEach(func() {
@@ -149,7 +149,7 @@ var _ = Describe("Tenant compute infrastructure readiness", func() {
 	It("reports no infrastructure when no matching CR exists", func() { observe(clientWith()); check(notReady, "InfrastructureNotProvisioned") })
 	It("ignores another tenant and namespace", func() {
 		foreign := object(osacv1alpha1.TenantPhaseReady)
-		foreign.Labels[labels.TenantUuid] = "other-api-id"
+		foreign.Labels[labels.TenantID] = "other-api-id"
 		elsewhere := object(osacv1alpha1.TenantPhaseReady)
 		elsewhere.Namespace = "other-ns"
 		observe(clientWith(foreign, elsewhere))
