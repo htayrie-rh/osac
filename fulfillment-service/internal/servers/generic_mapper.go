@@ -123,7 +123,14 @@ func (m *GenericMapper[From, To]) Copy(ctx context.Context, from From, to To) er
 	if !fromReflect.IsValid() || !toReflect.IsValid() {
 		return nil
 	}
-	return m.copyMessage(fromReflect, toReflect)
+	if err := m.copyMessage(fromReflect, toReflect); err != nil {
+		return err
+	}
+	if fromReflect.Descriptor().ParentFile().Package() == "osac.private.v1" &&
+		toReflect.Descriptor().ParentFile().Package() == "osac.public.v1" {
+		redactSystemReferences(to)
+	}
+	return nil
 }
 
 func (m *GenericMapper[From, To]) copyMessage(from, to protoreflect.Message) error {
