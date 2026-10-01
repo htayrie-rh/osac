@@ -404,6 +404,7 @@ func validatePlatformReference(reference fullResourceReference, kind, source str
 	}
 	return nil
 }
+
 // getReferenceResource reads a stored object by ID using caller visibility and the
 // request transaction. It does not check ownership, deletion, or readiness.
 func getReferenceResource[O dao.Object](ctx context.Context, resourceDao *dao.GenericDAO[O], id string) (O, error) {

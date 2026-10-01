@@ -130,6 +130,7 @@ var _ = Describe("Reference validator", func() {
 			return &ResolvedRef{ID: "local-id", Name: name}, nil
 		})
 		request := testsv1.UpdateTestResourceWithRefsRequest_builder{Object: testsv1.TestResourceWithRefs_builder{
+			Id:       "resource-1",
 			Metadata: testsv1.Metadata_builder{Tenant: "tenant-a"}.Build(),
 			Spec: testsv1.TestRefSpec_builder{
 				Target:      testsv1.TestTargetReference_builder{Name: "excluded"}.Build(),
@@ -1042,6 +1043,434 @@ var _ = Describe("Reference validator", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(capturedTenant).To(Equal("tenant-b"))
 			Expect(request.GetObject().GetSpec().GetTarget().GetTenant()).To(Equal("tenant-b"))
+		})
+
+		It("Uses the default tenant for a name-only reference when Create omits owner metadata", func() {
+			var capturedTenant string
+			defaultTenantCalls := 0
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetDefaultTenantResolver(func(context.Context) (string, error) {
+					defaultTenantCalls++
+					return "tenant-default", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.tests.v1.TestTargetReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant = tenant
+				return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Spec: testsv1.TestRefSpec_builder{
+						Target: testsv1.TestTargetReference_builder{Name: "target"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(Equal("tenant-default"))
+			Expect(defaultTenantCalls).To(Equal(1))
+			Expect(request.GetObject().GetSpec().GetTarget().GetTenant()).To(Equal("tenant-default"))
+		})
+
+		It("fails closed when the default tenant cannot be resolved", func() {
+			for _, testCase := range []struct {
+				name          string
+				resolverError error
+				wantCode      grpccodes.Code
+			}{
+				{
+					name:          "preserves a permission error",
+					resolverError: grpcstatus.Error(grpccodes.PermissionDenied, "no assignable tenant"),
+					wantCode:      grpccodes.PermissionDenied,
+				},
+				{
+					name:          "maps an unexpected error to internal",
+					resolverError: fmt.Errorf("database unavailable"),
+					wantCode:      grpccodes.Internal,
+				},
+			} {
+				By(testCase.name)
+				lookupCalled := false
+				validator, err := NewReferenceValidator().SetLogger(logger).
+					SetDefaultTenantResolver(func(context.Context) (string, error) {
+						return "", testCase.resolverError
+					}).Build()
+				Expect(err).ToNot(HaveOccurred())
+				validator.Register("osac.tests.v1.TestTargetReference", func(
+					ctx context.Context, tenant, project, id, name string,
+				) (*ResolvedRef, error) {
+					lookupCalled = true
+					return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+				})
+
+				request := testsv1.CreateTestResourceWithRefsRequest_builder{
+					Object: testsv1.TestResourceWithRefs_builder{
+						Spec: testsv1.TestRefSpec_builder{
+							Target: testsv1.TestTargetReference_builder{Name: "target"}.Build(),
+						}.Build(),
+					}.Build(),
+				}.Build()
+				handlerCalled := false
+
+				_, err = validator.UnaryServer(
+					context.Background(), request,
+					&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+					func(ctx context.Context, req any) (any, error) {
+						handlerCalled = true
+						return "response", nil
+					},
+				)
+
+				Expect(grpcstatus.Code(err)).To(Equal(testCase.wantCode))
+				Expect(lookupCalled).To(BeFalse())
+				Expect(handlerCalled).To(BeFalse())
+			}
+		})
+
+		It("denies a name-only reference when Create has no default tenant", func() {
+			lookupCalled := false
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetDefaultTenantResolver(func(context.Context) (string, error) { return "", nil }).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.tests.v1.TestTargetReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				lookupCalled = true
+				return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Spec: testsv1.TestRefSpec_builder{
+						Target: testsv1.TestTargetReference_builder{Name: "target"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+			handlerCalled := false
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) {
+					handlerCalled = true
+					return "response", nil
+				},
+			)
+
+			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+			Expect(lookupCalled).To(BeFalse())
+			Expect(handlerCalled).To(BeFalse())
+		})
+
+		It("Keeps ID-only full references unscoped when Create omits owner metadata", func() {
+			defaultTenantCalls := 0
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetDefaultTenantResolver(func(context.Context) (string, error) {
+					defaultTenantCalls++
+					return "tenant-default", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			var capturedTenant string
+			validator.Register("osac.tests.v1.TestTargetReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant = tenant
+				return &ResolvedRef{ID: id, Tenant: "tenant-other", Name: "target"}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Spec: testsv1.TestRefSpec_builder{
+						Target: testsv1.TestTargetReference_builder{Id: "target-id"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(BeEmpty())
+			Expect(defaultTenantCalls).To(BeZero())
+			Expect(request.GetObject().GetSpec().GetTarget().GetTenant()).To(Equal("tenant-other"))
+		})
+
+		It("Scopes local references to the default tenant when Create omits owner metadata", func() {
+			var capturedTenant string
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetDefaultTenantResolver(func(context.Context) (string, error) {
+					return "tenant-default", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.tests.v1.TestTargetLocalReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant = tenant
+				return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := testsv1.CreateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Spec: testsv1.TestRefSpec_builder{
+						LocalTarget: testsv1.TestTargetLocalReference_builder{Name: "target"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Create"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(Equal("tenant-default"))
+			Expect(request.GetObject().GetSpec().GetLocalTarget().GetId()).To(Equal("target-id"))
+		})
+
+		It("Uses the stored owner scope when Update metadata is outside the update mask", func() {
+			ownerScopeCalls := 0
+			lookupCalls := 0
+			var capturedTenant string
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetOwnerScopeResolver(func(_ context.Context, objectType protoreflect.FullName, id string) (string, string, error) {
+					ownerScopeCalls++
+					Expect(objectType).To(Equal(protoreflect.FullName("osac.private.v1.RoleBinding")))
+					Expect(id).To(Equal("binding-1"))
+					return "tenant-b", "project-b", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.private.v1.RoleReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				lookupCalls++
+				capturedTenant = tenant
+				Expect(project).To(Equal("project-b"))
+				return &ResolvedRef{ID: "target-b", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := privatev1.RoleBindingsUpdateRequest_builder{
+				Object: privatev1.RoleBinding_builder{
+					Id:       "binding-1",
+					Metadata: privatev1.Metadata_builder{Tenant: "tenant-a", Project: "project-a"}.Build(),
+					Spec: privatev1.RoleBindingSpec_builder{
+						Role: privatev1.RoleReference_builder{Name: "same-name"}.Build(),
+					}.Build(),
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"spec.role"}},
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: privatev1.RoleBindings_Update_FullMethodName},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(ownerScopeCalls).To(Equal(1))
+			Expect(lookupCalls).To(Equal(1))
+			Expect(capturedTenant).To(Equal("tenant-b"))
+			Expect(request.GetObject().GetSpec().GetRole().GetId()).To(Equal("target-b"))
+			Expect(request.GetObject().GetSpec().GetRole().GetTenant()).To(Equal("tenant-b"))
+		})
+
+		It("keeps an explicitly selected tenant and inherits the stored project on Update", func() {
+			var capturedTenant, capturedProject string
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetOwnerScopeResolver(func(context.Context, protoreflect.FullName, string) (string, string, error) {
+					return "tenant-owner", "project-owner", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.private.v1.RoleReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				capturedTenant, capturedProject = tenant, project
+				return &ResolvedRef{ID: "role-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := privatev1.RoleBindingsUpdateRequest_builder{
+				Object: privatev1.RoleBinding_builder{
+					Id: "binding-1",
+					Spec: privatev1.RoleBindingSpec_builder{
+						Role: privatev1.RoleReference_builder{Name: "role", Tenant: "tenant-selected"}.Build(),
+					}.Build(),
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"spec.role"}},
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: privatev1.RoleBindings_Update_FullMethodName},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(capturedTenant).To(Equal("tenant-selected"))
+			Expect(capturedProject).To(Equal("project-owner"))
+		})
+
+		It("fails closed when the stored owner has no tenant for a local Update reference", func() {
+			lookupCalled := false
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetOwnerScopeResolver(func(context.Context, protoreflect.FullName, string) (string, string, error) {
+					return "", "project-owner", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.tests.v1.TestTargetLocalReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				lookupCalled = true
+				return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := testsv1.UpdateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Id: "resource-1",
+					Spec: testsv1.TestRefSpec_builder{
+						LocalTarget: testsv1.TestTargetLocalReference_builder{Name: "target"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Update"},
+				func(ctx context.Context, req any) (any, error) { return "response", nil },
+			)
+
+			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.Internal))
+			Expect(lookupCalled).To(BeFalse())
+		})
+
+		It("Fails closed when owner scope cannot be resolved for an Update reference", func() {
+			for _, testCase := range []struct {
+				name          string
+				resolverError error
+				wantCode      grpccodes.Code
+			}{
+				{
+					name:          "maps an unexpected error to internal",
+					resolverError: fmt.Errorf("database unavailable"),
+					wantCode:      grpccodes.Internal,
+				},
+				{
+					name:          "preserves not found for a missing owner",
+					resolverError: grpcstatus.Error(grpccodes.NotFound, "owner not found"),
+					wantCode:      grpccodes.NotFound,
+				},
+			} {
+				By(testCase.name)
+				lookupCalled := false
+				validator, err := NewReferenceValidator().SetLogger(logger).
+					SetOwnerScopeResolver(func(context.Context, protoreflect.FullName, string) (string, string, error) {
+						return "", "", testCase.resolverError
+					}).Build()
+				Expect(err).ToNot(HaveOccurred())
+				validator.Register("osac.tests.v1.TestTargetReference", func(
+					ctx context.Context, tenant, project, id, name string,
+				) (*ResolvedRef, error) {
+					lookupCalled = true
+					return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+				})
+
+				request := testsv1.UpdateTestResourceWithRefsRequest_builder{
+					Object: testsv1.TestResourceWithRefs_builder{
+						Id: "resource-1",
+						Spec: testsv1.TestRefSpec_builder{
+							Target: testsv1.TestTargetReference_builder{Name: "target"}.Build(),
+						}.Build(),
+					}.Build(),
+				}.Build()
+
+				_, err = validator.UnaryServer(
+					context.Background(), request,
+					&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Update"},
+					func(ctx context.Context, req any) (any, error) { return "response", nil },
+				)
+
+				Expect(grpcstatus.Code(err)).To(Equal(testCase.wantCode))
+				Expect(lookupCalled).To(BeFalse())
+			}
+		})
+
+		It("Lets the handler report an Update with no owner identifier", func() {
+			ownerScopeCalled := false
+			lookupCalled := false
+			validator, err := NewReferenceValidator().SetLogger(logger).
+				SetOwnerScopeResolver(func(context.Context, protoreflect.FullName, string) (string, string, error) {
+					ownerScopeCalled = true
+					return "tenant-a", "", nil
+				}).Build()
+			Expect(err).ToNot(HaveOccurred())
+			validator.Register("osac.tests.v1.TestTargetReference", func(
+				ctx context.Context, tenant, project, id, name string,
+			) (*ResolvedRef, error) {
+				lookupCalled = true
+				return &ResolvedRef{ID: "target-id", Tenant: tenant, Project: project, Name: name}, nil
+			})
+
+			request := testsv1.UpdateTestResourceWithRefsRequest_builder{
+				Object: testsv1.TestResourceWithRefs_builder{
+					Spec: testsv1.TestRefSpec_builder{
+						Target: testsv1.TestTargetReference_builder{Name: "target"}.Build(),
+					}.Build(),
+				}.Build(),
+			}.Build()
+			handlerError := grpcstatus.Error(grpccodes.InvalidArgument, "object identifier is mandatory")
+
+			_, err = validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Update"},
+				func(ctx context.Context, req any) (any, error) { return nil, handlerError },
+			)
+
+			Expect(err).To(MatchError(handlerError))
+			Expect(ownerScopeCalled).To(BeFalse())
+			Expect(lookupCalled).To(BeFalse())
+		})
+
+		It("lets the handler report an Update with no object", func() {
+			validator, err := NewReferenceValidator().SetLogger(logger).Build()
+			Expect(err).ToNot(HaveOccurred())
+			handlerError := grpcstatus.Error(grpccodes.InvalidArgument, "object is mandatory")
+
+			_, err = validator.UnaryServer(
+				context.Background(), &testsv1.UpdateTestResourceWithRefsRequest{},
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Update"},
+				func(ctx context.Context, req any) (any, error) { return nil, handlerError },
+			)
+
+			Expect(err).To(MatchError(handlerError))
+		})
+
+		It("passes a non-protobuf Update request to the handler", func() {
+			validator, err := NewReferenceValidator().SetLogger(logger).Build()
+			Expect(err).ToNot(HaveOccurred())
+			request := struct{ Value string }{Value: "opaque"}
+
+			response, err := validator.UnaryServer(
+				context.Background(), request,
+				&grpc.UnaryServerInfo{FullMethod: "/osac.tests.v1.TestService/Update"},
+				func(_ context.Context, req any) (any, error) {
+					Expect(req).To(Equal(request))
+					return "response", nil
+				},
+			)
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(response).To(Equal("response"))
 		})
 	})
 

@@ -20,15 +20,18 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
+	"github.com/osac-project/osac/fulfillment-service/internal/database"
 	"github.com/osac-project/osac/fulfillment-service/internal/references"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
@@ -91,6 +94,34 @@ var _ = Describe("RegisterReferenceLookups", func() {
 		}
 	})
 })
+
+var _ = Describe("resolveUpdateOwnerScope", func() {
+	It("queries the stored owner scope from the resource table", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		tx := database.NewMockTx(ctrl)
+		ctx := database.TxIntoContext(context.Background(), tx)
+		tx.EXPECT().QueryRow(gomock.Any(), gomock.Any(), "binding-1").DoAndReturn(
+			func(_ context.Context, query string, _ ...any) pgx.Row {
+				Expect(query).To(ContainSubstring(`"role_bindings"`))
+				return ownerScopeTestRow{}
+			},
+		)
+
+		tenant, project, err := resolveUpdateOwnerScope(ctx, "osac.private.v1.RoleBinding", "binding-1")
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(tenant).To(Equal("tenant-b"))
+		Expect(project).To(Equal("project-b"))
+	})
+})
+
+type ownerScopeTestRow struct{}
+
+func (ownerScopeTestRow) Scan(dest ...any) error {
+	*dest[0].(*string) = "tenant-b"
+	*dest[1].(*string) = "project-b"
+	return nil
+}
 
 func isHandlerOwnedReferenceType(name protoreflect.FullName) bool {
 	return name == "osac.private.v1.AddOnOperatorReference" ||

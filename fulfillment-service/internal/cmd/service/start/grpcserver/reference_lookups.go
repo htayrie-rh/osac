@@ -14,12 +14,20 @@ language governing permissions and limitations under the License.
 package grpcserver
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
+	"github.com/gobuffalo/flect"
+	"github.com/jackc/pgx/v5"
 	"github.com/prometheus/client_golang/prometheus"
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
+	"github.com/osac-project/osac/fulfillment-service/internal/database"
 	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	"github.com/osac-project/osac/fulfillment-service/internal/references"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
@@ -323,4 +331,28 @@ func registerReferenceLookups(
 	)
 
 	return nil
+}
+
+// resolveUpdateOwnerScope fetches the current resource scope for sparse Update requests. Generic
+// DAO tables use the plural snake_case protobuf object name, so this uses the same naming rule.
+func resolveUpdateOwnerScope(ctx context.Context, objectType protoreflect.FullName,
+	id string) (tenant, project string, err error) {
+	if id == "" {
+		return "", "", fmt.Errorf("object identifier is missing")
+	}
+	tx, err := database.TxFromContext(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get transaction for owner scope: %w", err)
+	}
+	table := flect.Pluralize(flect.Underscore(string(objectType.Name())))
+	query := fmt.Sprintf("select coalesce(tenant, ''), coalesce(project, '') from %s where id = $1",
+		pgx.Identifier{table}.Sanitize())
+	err = tx.QueryRow(ctx, query, id).Scan(&tenant, &project)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", "", grpcstatus.Error(grpccodes.NotFound, "resource not found")
+		}
+		return "", "", fmt.Errorf("failed to fetch owner scope from %s: %w", table, err)
+	}
+	return tenant, project, nil
 }

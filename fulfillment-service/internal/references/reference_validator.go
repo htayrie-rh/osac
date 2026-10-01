@@ -52,11 +52,37 @@ type ReferenceLookupFunc func(
 	tenant, project, id, name string,
 ) (*ResolvedRef, error)
 
+// OwnerScopeResolverFunc retrieves the authoritative tenant and project for an existing
+// resource being updated. objectType is the protobuf full name of the resource and id is its ID.
+type OwnerScopeResolverFunc func(
+	ctx context.Context, objectType protoreflect.FullName, id string,
+) (tenant, project string, err error)
+
+type ownerScopeState struct {
+	resolver   OwnerScopeResolverFunc
+	objectType protoreflect.FullName
+	id         string
+	loaded     bool
+	tenant     string
+	project    string
+	err        error
+}
+
+func (s *ownerScopeState) resolve(ctx context.Context) (string, string, error) {
+	if !s.loaded {
+		s.loaded = true
+		s.tenant, s.project, s.err = s.resolver(ctx, s.objectType, s.id)
+	}
+	return s.tenant, s.project, s.err
+}
+
 // ReferenceValidatorBuilder configures and creates a ReferenceValidator. Don't create instances
 // of this type directly, use the NewReferenceValidator function instead.
 type ReferenceValidatorBuilder struct {
 	logger                         *slog.Logger
 	registerer                     prometheus.Registerer
+	defaultTenantResolver          func(context.Context) (string, error)
+	ownerScopeResolver             OwnerScopeResolverFunc
 	excludedReferencePathsByMethod map[string]map[string]struct{}
 }
 
@@ -67,6 +93,8 @@ type ReferenceValidatorBuilder struct {
 type ReferenceValidator struct {
 	logger                         *slog.Logger
 	registry                       map[protoreflect.FullName]ReferenceLookupFunc
+	defaultTenantResolver          func(context.Context) (string, error)
+	ownerScopeResolver             OwnerScopeResolverFunc
 	excludedReferencePathsByMethod map[string]map[string]struct{}
 	sealed                         atomic.Bool
 	validationTotal                *prometheus.CounterVec
@@ -88,6 +116,20 @@ func (b *ReferenceValidatorBuilder) SetLogger(value *slog.Logger) *ReferenceVali
 // SetMetricsRegisterer sets the Prometheus registerer for metrics. This is optional.
 func (b *ReferenceValidatorBuilder) SetMetricsRegisterer(value prometheus.Registerer) *ReferenceValidatorBuilder {
 	b.registerer = value
+	return b
+}
+
+// SetDefaultTenantResolver sets the resolver used to scope name-only references on creates
+// when the new object's metadata does not specify a tenant.
+func (b *ReferenceValidatorBuilder) SetDefaultTenantResolver(value func(context.Context) (string, error)) *ReferenceValidatorBuilder {
+	b.defaultTenantResolver = value
+	return b
+}
+
+// SetOwnerScopeResolver sets the resolver used to scope name-only and local references on
+// updates when the request omits the existing object's tenant or project metadata.
+func (b *ReferenceValidatorBuilder) SetOwnerScopeResolver(value OwnerScopeResolverFunc) *ReferenceValidatorBuilder {
+	b.ownerScopeResolver = value
 	return b
 }
 
@@ -151,6 +193,8 @@ func (b *ReferenceValidatorBuilder) Build() (result *ReferenceValidator, err err
 	result = &ReferenceValidator{
 		logger:                         b.logger,
 		registry:                       make(map[protoreflect.FullName]ReferenceLookupFunc),
+		defaultTenantResolver:          b.defaultTenantResolver,
+		ownerScopeResolver:             b.ownerScopeResolver,
 		excludedReferencePathsByMethod: b.excludedReferencePathsByMethod,
 		validationTotal:                validationTotal,
 		validationDuration:             validationDuration,
@@ -183,12 +227,15 @@ func (v *ReferenceValidator) UnaryServer(ctx context.Context, request any, info 
 	if err := validateCanonicalUpdateMask(request); err != nil {
 		return nil, err
 	}
+	if strings.HasSuffix(info.FullMethod, "/Update") && !hasOwnerIdentifier(request) {
+		return handler(ctx, request)
+	}
 	if strings.HasSuffix(info.FullMethod, "/Update") && isMetadataOnlyUpdate(request) {
 		return handler(ctx, request)
 	}
 
 	excluded := v.excludedReferencePathsByMethod[info.FullMethod]
-	err = v.validate(ctx, request, excluded)
+	err = v.validate(ctx, request, excluded, strings.HasSuffix(info.FullMethod, "/Create"))
 	if err != nil {
 		return
 	}
@@ -204,16 +251,23 @@ func (v *ReferenceValidator) StreamServer(srv any, stream grpc.ServerStream,
 }
 
 // validate walks the request message and validates all reference-typed fields.
-func (v *ReferenceValidator) validate(ctx context.Context, request any, excluded map[string]struct{}) error {
+func (v *ReferenceValidator) validate(ctx context.Context, request any, excluded map[string]struct{}, isCreate bool) error {
 	message, ok := request.(proto.Message)
 	if !ok {
 		return nil
 	}
 
 	tenant, project := extractTenantProject(message)
+	ownerType, ownerID := extractOwnerTypeAndID(message)
+	ownerScope := &ownerScopeState{
+		resolver:   v.ownerScopeResolver,
+		objectType: ownerType,
+		id:         ownerID,
+	}
 
 	var violations []*errdetails.BadRequest_FieldViolation
-	err := v.walkMessage(ctx, message.ProtoReflect(), nil, &violations, tenant, project, excluded)
+	err := v.walkMessage(ctx, message.ProtoReflect(), nil, &violations, tenant, project, excluded, isCreate,
+		ownerScope)
 	if err != nil {
 		return err
 	}
@@ -351,7 +405,7 @@ func isCanonicalUpdateMask(mask *fieldmaskpb.FieldMask, descriptor protoreflect.
 // missing reference fields.
 func (v *ReferenceValidator) walkMessage(ctx context.Context, msg protoreflect.Message, path []string,
 	violations *[]*errdetails.BadRequest_FieldViolation, tenant, project string,
-	excluded map[string]struct{}) error {
+	excluded map[string]struct{}, isCreate bool, ownerScope *ownerScopeState) error {
 	var internalErr error
 
 	msg.Range(func(fd protoreflect.FieldDescriptor, val protoreflect.Value) bool {
@@ -383,14 +437,15 @@ func (v *ReferenceValidator) walkMessage(ctx context.Context, msg protoreflect.M
 
 				if isReferenceType(fullName) {
 					err := v.resolveAndMutate(ctx, elemMsg, fullName, indexedPath,
-						violations, tenant, project)
+						violations, tenant, project, isCreate, ownerScope)
 					if err != nil {
 						internalErr = err
 						return false
 					}
 					continue
 				}
-				err := v.walkMessage(ctx, elemMsg, indexedPath, violations, tenant, project, excluded)
+				err := v.walkMessage(ctx, elemMsg, indexedPath, violations, tenant, project, excluded, isCreate,
+					ownerScope)
 				if err != nil {
 					internalErr = err
 					return false
@@ -404,14 +459,15 @@ func (v *ReferenceValidator) walkMessage(ctx context.Context, msg protoreflect.M
 
 		if isReferenceType(fullName) {
 			err := v.resolveAndMutate(ctx, subMsg, fullName, fieldPath,
-				violations, tenant, project)
+				violations, tenant, project, isCreate, ownerScope)
 			if err != nil {
 				internalErr = err
 				return false
 			}
 			return true
 		}
-		err := v.walkMessage(ctx, subMsg, fieldPath, violations, tenant, project, excluded)
+		err := v.walkMessage(ctx, subMsg, fieldPath, violations, tenant, project, excluded, isCreate,
+			ownerScope)
 		if err != nil {
 			internalErr = err
 			return false
@@ -428,7 +484,7 @@ func (v *ReferenceValidator) walkMessage(ctx context.Context, msg protoreflect.M
 func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protoreflect.Message,
 	fullName protoreflect.FullName, path []string,
 	violations *[]*errdetails.BadRequest_FieldViolation,
-	callerTenant, callerProject string) error {
+	callerTenant, callerProject string, isCreate bool, ownerScope *ownerScopeState) error {
 
 	lookupFunc, ok := v.registry[fullName]
 	if !ok {
@@ -440,8 +496,6 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 			"no lookup registered for reference type %q", fullName)
 	}
 
-	refTenant, refProject := resolveTenantProject(refMsg, fullName, callerTenant, callerProject)
-
 	idField := refMsg.Descriptor().Fields().ByName("id")
 	nameField := refMsg.Descriptor().Fields().ByName("name")
 	if !isStringField(idField) || !isStringField(nameField) {
@@ -451,6 +505,11 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 	id := refMsg.Get(idField).String()
 	name := refMsg.Get(nameField).String()
 
+	tenantField := refMsg.Descriptor().Fields().ByName("tenant")
+	referenceTenant := ""
+	if tenantField != nil {
+		referenceTenant = refMsg.Get(tenantField).String()
+	}
 	resourceType := string(fullName.Name())
 	fieldPath := strings.Join(path, ".")
 
@@ -462,6 +521,22 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 		v.recordResult(resourceType, "invalid")
 		return nil
 	}
+
+	callerTenant, callerProject, err := v.updateReferenceScope(ctx, fullName, id, name, referenceTenant,
+		callerTenant, callerProject, isCreate, ownerScope)
+	if err != nil {
+		return err
+	}
+
+	// A create without metadata.tenant will receive the caller's default tenant in its handler.
+	// Resolve local references there, and full-reference names that inherit their owner's scope,
+	// against that same tenant before the handler assigns metadata.
+	callerTenant, err = v.defaultReferenceTenant(ctx, callerTenant, referenceTenant,
+		isCreate && (isLocalReference(fullName) || (id == "" && name != "")))
+	if err != nil {
+		return err
+	}
+	refTenant, refProject := resolveTenantProject(refMsg, fullName, callerTenant, callerProject)
 
 	start := time.Now()
 	lookupTenant := refTenant
@@ -522,7 +597,7 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 	if name == "" && resolved.Name != "" {
 		refMsg.Set(nameField, protoreflect.ValueOfString(resolved.Name))
 	}
-	tenantField := refMsg.Descriptor().Fields().ByName("tenant")
+	tenantField = refMsg.Descriptor().Fields().ByName("tenant")
 	if tenantField != nil && resolved.Tenant != "" {
 		refMsg.Set(tenantField, protoreflect.ValueOfString(resolved.Tenant))
 	}
@@ -551,6 +626,77 @@ func (v *ReferenceValidator) resolveAndMutate(ctx context.Context, refMsg protor
 	)
 	v.recordResult(resourceType, "valid")
 	return nil
+}
+
+func (v *ReferenceValidator) updateReferenceScope(ctx context.Context, fullName protoreflect.FullName,
+	id, name, referenceTenant, callerTenant, callerProject string, isCreate bool,
+	ownerScope *ownerScopeState) (string, string, error) {
+	// Update request metadata may be partial or outside the update mask. For references that
+	// inherit owner scope, use the stored resource scope instead of trusting those request fields.
+	needsStoredScope := !isCreate && ownerScope.resolver != nil &&
+		(isLocalReference(fullName) || (id == "" && name != ""))
+	if !needsStoredScope {
+		return callerTenant, callerProject, nil
+	}
+	if ownerScope.objectType == "" || ownerScope.id == "" {
+		return "", "", grpcstatus.Error(grpccodes.Internal, "failed to determine owner scope for reference validation")
+	}
+
+	ownerTenant, ownerProject, err := ownerScope.resolve(ctx)
+	if err != nil {
+		v.logger.ErrorContext(ctx, "Failed to determine owner scope for reference validation", "error", err)
+		if grpcstatus.Code(err) != grpccodes.Unknown {
+			return "", "", err
+		}
+		return "", "", grpcstatus.Error(grpccodes.Internal, "failed to determine owner scope for reference validation")
+	}
+	if (isLocalReference(fullName) || (id == "" && name != "" && referenceTenant == "")) && ownerTenant == "" {
+		return "", "", grpcstatus.Error(grpccodes.Internal, "owner tenant is missing during reference validation")
+	}
+	return ownerTenant, ownerProject, nil
+}
+
+func (v *ReferenceValidator) defaultReferenceTenant(ctx context.Context, callerTenant, referenceTenant string,
+	needsOwnerTenant bool) (string, error) {
+	if !needsOwnerTenant || callerTenant != "" || referenceTenant != "" || v.defaultTenantResolver == nil {
+		return callerTenant, nil
+	}
+
+	defaultTenant, err := v.defaultTenantResolver(ctx)
+	if err != nil {
+		v.logger.ErrorContext(ctx, "Failed to determine default tenant for reference validation", "error", err)
+		if grpcstatus.Code(err) != grpccodes.Unknown {
+			return "", err
+		}
+		return "", grpcstatus.Error(grpccodes.Internal, "failed to determine default tenant")
+	}
+	if defaultTenant == "" {
+		return "", grpcstatus.Error(grpccodes.PermissionDenied, "there is no default tenant")
+	}
+	return defaultTenant, nil
+}
+
+func extractOwnerTypeAndID(request proto.Message) (protoreflect.FullName, string) {
+	requestMessage := request.ProtoReflect()
+	objectField := requestMessage.Descriptor().Fields().ByName("object")
+	if objectField == nil || objectField.Kind() != protoreflect.MessageKind || !requestMessage.Has(objectField) {
+		return "", ""
+	}
+	object := requestMessage.Get(objectField).Message()
+	idField := object.Descriptor().Fields().ByName("id")
+	if idField == nil || idField.Kind() != protoreflect.StringKind {
+		return object.Descriptor().FullName(), ""
+	}
+	return object.Descriptor().FullName(), object.Get(idField).String()
+}
+
+func hasOwnerIdentifier(request any) bool {
+	message, ok := request.(proto.Message)
+	if !ok {
+		return true
+	}
+	ownerType, id := extractOwnerTypeAndID(message)
+	return ownerType != "" && id != ""
 }
 
 func (v *ReferenceValidator) recordResult(resourceType, result string) {

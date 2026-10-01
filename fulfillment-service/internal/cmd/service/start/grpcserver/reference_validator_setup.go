@@ -33,6 +33,8 @@ import (
 // Other references continue through the interceptor's registered lookups.
 func newReferenceValidator(logger *slog.Logger, tenancy auth.TenancyLogic, registerer prometheus.Registerer) (*references.ReferenceValidator, error) {
 	validator, err := references.NewReferenceValidator().SetLogger(logger).SetMetricsRegisterer(registerer).
+		SetDefaultTenantResolver(tenancy.DetermineDefaultTenant).
+		SetOwnerScopeResolver(resolveUpdateOwnerScope).
 		SetExcludedReferencePaths(catalogProvenanceUpdateMethods(), "object.spec.catalog_item").
 		SetExcludedReferencePaths(catalogAuthoringMethods(), "object.template", "object.fields").
 		SetExcludedReferencePaths(catalogCreationSourceMethods(), "object.spec.catalog_item", "object.spec.template").
