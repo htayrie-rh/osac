@@ -30,7 +30,7 @@ import (
 )
 
 var _ = Describe("Tenant compute readiness feedback", func() {
-	It("reports ready after the operator observes the Tenant CR", func(ctx context.Context) {
+	It("reports ready after Tenant status feedback", func(ctx context.Context) {
 		tenants := privatev1.NewTenantsClient(tool.InternalView().AdminConn())
 		projects := privatev1.NewProjectsClient(tool.InternalView().AdminConn())
 		name := fmt.Sprintf("test-compute-%s", uuid.New())
@@ -44,8 +44,17 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 			object := &osacv1alpha1.Tenant{}
 			g.Expect(tool.KubeClient().Get(ctx, key, object)).To(Succeed())
 			g.Expect(object.Labels).To(HaveKeyWithValue(labels.TenantUuid, id))
-			g.Expect(object.Status.Phase).To(Equal(osacv1alpha1.TenantPhaseReady))
 		}, time.Minute, time.Second).Should(Succeed())
+
+		By("Marking the Tenant CR ready and signaling the status feedback")
+		Eventually(func(g Gomega) {
+			object := &osacv1alpha1.Tenant{}
+			g.Expect(tool.KubeClient().Get(ctx, key, object)).To(Succeed())
+			object.Status.Phase = osacv1alpha1.TenantPhaseReady
+			g.Expect(tool.KubeClient().Status().Update(ctx, object)).To(Succeed())
+		}, time.Minute, time.Second).Should(Succeed())
+		_, err := tenants.Signal(ctx, privatev1.TenantsSignalRequest_builder{Id: id}.Build())
+		Expect(err).NotTo(HaveOccurred())
 
 		expectComputeCondition := func(want privatev1.ConditionStatus, reason string, timeout time.Duration) {
 			Eventually(func(g Gomega) {
@@ -84,6 +93,8 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 		DeferCleanup(func(cleanupCtx context.Context) {
 			_ = tool.KubeClient().Delete(cleanupCtx, duplicate)
 		})
+		_, err = tenants.Signal(ctx, privatev1.TenantsSignalRequest_builder{Id: id}.Build())
+		Expect(err).NotTo(HaveOccurred())
 		expectComputeCondition(privatev1.ConditionStatus_CONDITION_STATUS_UNSPECIFIED, "InfrastructureStatusUnknown", 15*time.Second)
 
 		By("Removing the ambiguity and changing Tenant status to trigger feedback")
@@ -105,6 +116,8 @@ var _ = Describe("Tenant compute readiness feedback", func() {
 			})
 			g.Expect(tool.KubeClient().Status().Update(ctx, object)).To(Succeed())
 		}, time.Minute, time.Second).Should(Succeed())
+		_, err = tenants.Signal(ctx, privatev1.TenantsSignalRequest_builder{Id: id}.Build())
+		Expect(err).NotTo(HaveOccurred())
 
 		expectComputeCondition(privatev1.ConditionStatus_CONDITION_STATUS_TRUE, "InfrastructureReady", 15*time.Second)
 	})
