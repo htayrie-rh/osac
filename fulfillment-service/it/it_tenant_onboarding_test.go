@@ -60,7 +60,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		Eventually(
 			func(g Gomega) {
 				err := kubeClient.List(ctx, tenantList, crclient.MatchingLabels{
-					labels.TenantUuid: name,
+					labels.TenantUuid: id,
 				}, crclient.InNamespace(hubNamespace))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(tenantList.Items).To(HaveLen(1))
@@ -71,7 +71,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		tenantCR := &tenantList.Items[0]
 		Expect(tenantCR.GetName()).To(Equal(name))
 		Expect(tenantCR.GetNamespace()).To(Equal(hubNamespace))
-		Expect(tenantCR.Labels[labels.TenantUuid]).To(Equal(name))
+		Expect(tenantCR.Labels[labels.TenantUuid]).To(Equal(id))
 
 		By("Verifying namespace exists on the hub cluster")
 		ns := &corev1.Namespace{}
@@ -102,7 +102,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		Eventually(
 			func(g Gomega) {
 				err := kubeClient.List(ctx, tenantList, crclient.MatchingLabels{
-					labels.TenantUuid: name,
+					labels.TenantUuid: id,
 				}, crclient.InNamespace(hubNamespace))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(tenantList.Items).To(HaveLen(1))
@@ -118,7 +118,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		Eventually(
 			func(g Gomega) {
 				err := kubeClient.List(ctx, tenantList, crclient.MatchingLabels{
-					labels.TenantUuid: name,
+					labels.TenantUuid: id,
 				}, crclient.InNamespace(hubNamespace))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(tenantList.Items).To(BeEmpty())
@@ -154,7 +154,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		Eventually(
 			func(g Gomega) {
 				err := kubeClient.List(ctx, tenantList, crclient.MatchingLabels{
-					labels.TenantUuid: name,
+					labels.TenantUuid: id,
 				}, crclient.InNamespace(hubNamespace))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(tenantList.Items).To(HaveLen(1))
@@ -188,7 +188,7 @@ var _ = Describe("Tenant onboarding to hub", func() {
 		Eventually(
 			func(g Gomega) {
 				err := kubeClient.List(ctx, tenantList, crclient.MatchingLabels{
-					labels.TenantUuid: name,
+					labels.TenantUuid: id,
 				}, crclient.InNamespace(hubNamespace))
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(tenantList.Items).To(HaveLen(1))
