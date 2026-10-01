@@ -27,7 +27,7 @@ const clusterCatalogItem: ClusterCatalogItem = {
     id: 'tpl-openshift-4',
     name: '',
     project: '',
-    shared: false,
+    tenant: '',
   },
   published: true,
   templateParameters: {},

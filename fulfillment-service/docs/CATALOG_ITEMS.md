@@ -71,7 +71,7 @@ node_sets:
   workers:
     host_type:
       name: fc430
-      shared: true
+      tenant: shared
     size: 1
 parameters:
   - name: vpc_id
@@ -106,13 +106,13 @@ title: Sandbox Cluster
 description: Small development cluster.
 template:
   name: sandbox
-  shared: true
+  tenant: shared
 published: true
 fields:
   version:
     locked:
       name: 4-17-0
-      shared: true
+      tenant: shared
   node_sets:
     editable:
       default_value:
@@ -120,7 +120,7 @@ fields:
           workers:
             host_type:
               name: fc430
-              shared: true
+              tenant: shared
             size: 1
   network:
     pod_cidr:
@@ -171,18 +171,18 @@ title: Standard Virtual Machine
 description: Fedora virtual machine with customizable compute resources and boot-disk size.
 template:
   id: osac.templates.ocp_virt_vm
-  shared: true
+  tenant: shared
 published: true
 fields:
   disk_image:
     locked:
       name: fedora
-      shared: true
+      tenant: shared
   instance_type:
     editable:
       default_value:
         name: u1-small
-        shared: true
+        tenant: shared
   boot_disk:
     size_gib:
       editable:
@@ -233,15 +233,16 @@ The input file can contain multiple documents separated by `---`. Create depende
 
 ### Reference scope
 
-You can reference an object by ID or name. An ID must be visible to you, but does not need `shared`
-or `project` selectors. If you supply both an ID and a name, they must identify the same object.
+You can reference an object by ID or name. An ID must be visible to you. If you supply both an ID
+and a name, they must identify the same object.
 
-When using a name, set `shared: true` for an object in the shared tenant. Set `project` to reference
-an object in another project within the same tenant. See
+Name lookup defaults to the tenant and project of the object containing the reference. Set
+`tenant: shared` to select an object in the shared tenant, or set `tenant` to another visible
+tenant. Set `project` to select an object in another project. See
 [Object references](API.md#object-references) for the reference format.
 
-Shared catalogs use shared dependencies. Tenant catalogs can use shared objects or objects from
-their own tenant.
+Full references can target any tenant visible to the caller. Tenant selection does not grant access
+to that tenant.
 
 Local references follow a stricter rule: they must point to objects in the owner's tenant and
 project. This applies to both the catalog and the resource being created. Examples include Secrets,
@@ -332,9 +333,9 @@ At BareMetalInstance creation, a locked value is applied, or an editable
 default is applied when the caller omitted `spec.disk_image`, before normal BMI
 DiskImage validation. A caller-provided value overrides an editable default.
 
-The referenced DiskImage must belong to the CatalogItem's tenant or the shared
-tenant. A cross-tenant reference is rejected with `InvalidArgument` when it
-resolves; a reference that cannot be resolved returns `NotFound`. An `OBSOLETE`
+The referenced DiskImage must be visible to the caller. Set its `tenant` field
+to select another tenant; an omitted tenant uses the CatalogItem's tenant for
+name lookup. A reference that cannot be resolved returns `NotFound`. An `OBSOLETE`
 image is rejected. A `DEPRECATED` image is accepted but emits a warning from
 the gRPC CatalogItem Create response or an Update that revalidates the policy,
 including one that changes `fields` or publishes the CatalogItem. REST Create
@@ -432,9 +433,9 @@ and is visible to you:
 ```bash
 # The catalog fixes the image, so neither command can override it:
 osac create computeinstance --catalog-item <standard-vm-id> \
-  --disk-image another-image --set disk_image.shared=true
+  --disk-image another-image --set disk_image.tenant=shared
 osac create computeinstance --catalog-item <standard-vm-id> \
-  --disk-image fedora --set disk_image.shared=true
+  --disk-image fedora --set disk_image.tenant=shared
 # Error includes: disk_image: field is not editable
 ```
 

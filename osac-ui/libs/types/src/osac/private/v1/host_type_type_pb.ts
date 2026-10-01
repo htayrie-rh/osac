@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file osac/private/v1/host_type_type.proto.
  */
 export const file_osac_private_v1_host_type_type: GenFile = /*@__PURE__*/
-  fileDesc("CiRvc2FjL3ByaXZhdGUvdjEvaG9zdF90eXBlX3R5cGUucHJvdG8SD29zYWMucHJpdmF0ZS52MSKeAQoISG9zdFR5cGUSCgoCaWQYASABKAkSKwoIbWV0YWRhdGEYAiABKAsyGS5vc2FjLnByaXZhdGUudjEuTWV0YWRhdGESDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSNQoKaW50ZXJmYWNlcxgFIAMoCzIhLm9zYWMucHJpdmF0ZS52MS5OZXR3b3JrSW50ZXJmYWNlIkMKEE5ldHdvcmtJbnRlcmZhY2USDAoEbmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJIk4KEUhvc3RUeXBlUmVmZXJlbmNlEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHcHJvamVjdBgDIAEoCRIOCgZzaGFyZWQYBCABKAhCFIq1GBASDm9zYWMucHVibGljLnYxYgZwcm90bzM", [file_cleanapi_cleanapi, file_osac_private_v1_metadata_type]);
+  fileDesc("CiRvc2FjL3ByaXZhdGUvdjEvaG9zdF90eXBlX3R5cGUucHJvdG8SD29zYWMucHJpdmF0ZS52MSKeAQoISG9zdFR5cGUSCgoCaWQYASABKAkSKwoIbWV0YWRhdGEYAiABKAsyGS5vc2FjLnByaXZhdGUudjEuTWV0YWRhdGESDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSNQoKaW50ZXJmYWNlcxgFIAMoCzIhLm9zYWMucHJpdmF0ZS52MS5OZXR3b3JrSW50ZXJmYWNlIkMKEE5ldHdvcmtJbnRlcmZhY2USDAoEbmFtZRgBIAEoCRIMCgRyb2xlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJIlwKEUhvc3RUeXBlUmVmZXJlbmNlEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHcHJvamVjdBgDIAEoCRIOCgZ0ZW5hbnQYBSABKAlKBAgEEAVSBnNoYXJlZEIUirUYEBIOb3NhYy5wdWJsaWMudjFiBnByb3RvMw", [file_cleanapi_cleanapi, file_osac_private_v1_metadata_type]);
 
 /**
  * Describes a set of hosts that share characteristics.
@@ -156,9 +156,11 @@ export type HostTypeReference = Message<"osac.private.v1.HostTypeReference"> & {
   project: string;
 
   /**
-   * @generated from field: bool shared = 4;
+   * Tenant selector for name-based resolution. ID-only references may omit it and use caller visibility.
+   *
+   * @generated from field: string tenant = 5;
    */
-  shared: boolean;
+  tenant: string;
 };
 
 /**

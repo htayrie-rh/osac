@@ -117,8 +117,8 @@ been marked for deletion.
 
 Object references are typed messages (see [API.md — Object references](API.md#object-references)),
 so filter expressions must access their sub-fields rather than comparing the reference directly as
-a string. Every reference has at least `id` and `name`; full references additionally have `project`
-and `shared`.
+a string. Every reference has at least `id` and `name`; full references additionally have `tenant`
+and `project`.
 
 Select subnets belonging to a specific virtual network by name:
 

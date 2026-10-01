@@ -658,15 +658,16 @@ There are two kinds of references:
 
 ### Full references
 
-Full references can point to objects in a different project or in the shared tenant. They have
-four fields:
+Full references can point to objects in a different tenant or project. They have five fields:
 
 ```protobuf
 message ClusterTemplateReference {
   string id = 1;
   string name = 2;
   string project = 3;
-  bool shared = 4;
+  reserved 4;
+  reserved "shared";
+  string tenant = 5;
 }
 ```
 
@@ -674,8 +675,12 @@ message ClusterTemplateReference {
 |-----------|-------------|
 | `id`      | Unique identifier of the referenced object. |
 | `name`    | Human-readable name of the referenced object. |
-| `project` | Project where the referenced object lives. Defaults to the caller's project when omitted. |
-| `shared`  | When `true`, the lookup targets the `shared` tenant (overrides the caller's tenant). |
+| `project` | Project where the referenced object lives. For name lookups, defaults to the owning object's project when omitted. |
+| `tenant`  | Tenant where the referenced object lives. For name lookups, defaults to the owning object's tenant when omitted. |
+
+The caller must be authorized to see the selected tenant. Use `tenant: "shared"` to reference an
+object in the shared tenant. ID-only references may omit tenant and project to resolve by the
+caller's visible, globally unique ID. Any supplied tenant or project constrains ID and name lookups.
 
 Callers may supply `id`, `name`, or both. When both are provided they must refer to the same
 object; otherwise the server returns `InvalidArgument`. The server auto-populates whichever field
@@ -722,7 +727,7 @@ In the JSON representation used by the REST gateway, reference fields are nested
 }
 ```
 
-For local references the format is identical but without `project` and `shared`:
+For local references the format is identical but without `tenant` and `project`:
 
 ```json
 {
@@ -744,7 +749,7 @@ Repeated references (e.g., security groups in a network attachment) are arrays o
 }
 ```
 
-### Cross-project references
+### Cross-tenant and cross-project references
 
 To reference an object by name in a different project within the same tenant, set the `project` field:
 
@@ -757,12 +762,12 @@ To reference an object by name in a different project within the same tenant, se
 ```
 
 To reference an object by name in the shared tenant (e.g., a globally available template), set
-`shared` to `true`:
+`tenant` to `shared`:
 
 ```json
 {
   "spec": {
-    "template": { "name": "sandbox", "shared": true }
+    "template": { "name": "sandbox", "tenant": "shared" }
   }
 }
 ```
@@ -773,7 +778,7 @@ The server validates references on `Create` and `Update`. A gRPC interceptor han
 reference fields. For each field it handles, the interceptor:
 
 1. Determines the lookup scope from the object's tenant and project. For a full reference by
-   name, the `project` and `shared` fields can select another scope.
+   name, the `tenant` and `project` fields can select another scope, subject to caller visibility.
 2. Looks up the referenced object by `id` or `name`.
 3. If both `id` and `name` are provided, verifies they refer to the same object.
 4. Fills in whichever of `id` or `name` the caller omitted.

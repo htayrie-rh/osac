@@ -221,8 +221,9 @@ export type BareMetalInstanceSpec = Message<"osac.private.v1.BareMetalInstanceSp
 
   /**
    * Reference to a DiskImage resource, selected by ID or name. The reference is immutable after creation.
-   * Catalog items can provide a default when callers omit it. The reference must resolve to an image in the instance
-   * tenant or shared tenant. Available images are accepted, deprecated images are accepted with a warning, and
+   * Catalog items can provide a default when callers omit it. Use tenant/project to select a scope; a name-only
+   * reference with neither selector prefers the instance tenant, then shared. An ID-only reference may select any
+   * image visible to the caller. Available images are accepted, deprecated images are accepted with a warning, and
    * obsolete images are rejected.
    *
    * @generated from field: osac.private.v1.DiskImageReference disk_image = 12;

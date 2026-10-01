@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file osac/public/v1/role_type.proto.
  */
 export const file_osac_public_v1_role_type: GenFile = /*@__PURE__*/
-  fileDesc("Ch5vc2FjL3B1YmxpYy92MS9yb2xlX3R5cGUucHJvdG8SDm9zYWMucHVibGljLnYxIpIBCgRSb2xlEgoKAmlkGAEgASgJEioKCG1ldGFkYXRhGAIgASgLMhgub3NhYy5wdWJsaWMudjEuTWV0YWRhdGESJgoEc3BlYxgDIAEoCzIYLm9zYWMucHVibGljLnYxLlJvbGVTcGVjEioKBnN0YXR1cxgEIAEoCzIaLm9zYWMucHVibGljLnYxLlJvbGVTdGF0dXMiLgoIUm9sZVNwZWMSDQoFdGl0bGUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkiWAoKUm9sZVN0YXR1cxIoCgVzdGF0ZRgBIAEoDjIZLm9zYWMucHVibGljLnYxLlJvbGVTdGF0ZRIUCgdtZXNzYWdlGAIgASgJSACIAQFCCgoIX21lc3NhZ2UiSgoNUm9sZVJlZmVyZW5jZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB3Byb2plY3QYAyABKAkSDgoGc2hhcmVkGAQgASgIKmwKCVJvbGVTdGF0ZRIaChZST0xFX1NUQVRFX1VOU1BFQ0lGSUVEEAASFgoSUk9MRV9TVEFURV9QRU5ESU5HEAESFAoQUk9MRV9TVEFURV9SRUFEWRACEhUKEVJPTEVfU1RBVEVfRkFJTEVEEANiBnByb3RvMw", [file_osac_public_v1_metadata_type]);
+  fileDesc("Ch5vc2FjL3B1YmxpYy92MS9yb2xlX3R5cGUucHJvdG8SDm9zYWMucHVibGljLnYxIpIBCgRSb2xlEgoKAmlkGAEgASgJEioKCG1ldGFkYXRhGAIgASgLMhgub3NhYy5wdWJsaWMudjEuTWV0YWRhdGESJgoEc3BlYxgDIAEoCzIYLm9zYWMucHVibGljLnYxLlJvbGVTcGVjEioKBnN0YXR1cxgEIAEoCzIaLm9zYWMucHVibGljLnYxLlJvbGVTdGF0dXMiLgoIUm9sZVNwZWMSDQoFdGl0bGUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkiWAoKUm9sZVN0YXR1cxIoCgVzdGF0ZRgBIAEoDjIZLm9zYWMucHVibGljLnYxLlJvbGVTdGF0ZRIUCgdtZXNzYWdlGAIgASgJSACIAQFCCgoIX21lc3NhZ2UiWAoNUm9sZVJlZmVyZW5jZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB3Byb2plY3QYAyABKAkSDgoGdGVuYW50GAUgASgJSgQIBBAFUgZzaGFyZWQqbAoJUm9sZVN0YXRlEhoKFlJPTEVfU1RBVEVfVU5TUEVDSUZJRUQQABIWChJST0xFX1NUQVRFX1BFTkRJTkcQARIUChBST0xFX1NUQVRFX1JFQURZEAISFQoRUk9MRV9TVEFURV9GQUlMRUQQA2IGcHJvdG8z", [file_osac_public_v1_metadata_type]);
 
 /**
  * Represents a role that can be assigned to groups.
@@ -156,9 +156,11 @@ export type RoleReference = Message<"osac.public.v1.RoleReference"> & {
   project: string;
 
   /**
-   * @generated from field: bool shared = 4;
+   * Tenant selector for name-based resolution. ID-only references may omit it and use caller visibility.
+   *
+   * @generated from field: string tenant = 5;
    */
-  shared: boolean;
+  tenant: string;
 };
 
 /**

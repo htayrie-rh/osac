@@ -27,7 +27,7 @@ const vmCatalogItem: ComputeInstanceCatalogItem = {
     id: 'tpl-rhel-9',
     name: 'tpl-rhel-9',
     project: '',
-    shared: false,
+    tenant: '',
   },
   published: true,
   templateParameters: {},

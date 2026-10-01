@@ -52,7 +52,7 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 				}.Build(),
 				DiskImage: publicv1.DiskImageReferenceFieldPolicy_builder{
 					Editable: publicv1.EditableDiskImageReferenceField_builder{
-						DefaultValue: publicv1.DiskImageReference_builder{Name: image.GetMetadata().GetName(), Shared: true}.Build(),
+						DefaultValue: publicv1.DiskImageReference_builder{Name: image.GetMetadata().GetName(), Tenant: "shared"}.Build(),
 					}.Build(),
 				}.Build(),
 				UserData: publicv1.StringFieldPolicy_builder{Locked: new("")}.Build(),
@@ -118,9 +118,9 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 			Expect(err).NotTo(HaveOccurred())
 			spec := response.GetObject().GetSpec()
 			Expect(spec.GetInstanceType().GetId()).To(Equal(instanceType))
-			Expect(spec.GetInstanceType().GetShared()).To(BeTrue())
+			Expect(spec.GetInstanceType().GetTenant()).To(Equal("shared"))
 			Expect(spec.GetDiskImage().GetId()).To(Equal(overrideImage.GetId()))
-			Expect(spec.GetDiskImage().GetShared()).To(BeTrue())
+			Expect(spec.GetDiskImage().GetTenant()).To(Equal("shared"))
 			Expect(spec.HasUserData()).To(BeTrue())
 			Expect(spec.GetUserData()).To(BeEmpty())
 			Expect(spec.HasAutoExternalIpAttachment()).To(BeTrue())
@@ -1176,14 +1176,14 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 				}.Build(),
 			}.Build())
 			Expect(item.GetFields().GetDiskImage().GetLocked().GetId()).To(Equal(local.GetId()))
-			Expect(item.GetFields().GetDiskImage().GetLocked().GetShared()).To(BeFalse())
+			Expect(item.GetFields().GetDiskImage().GetLocked().GetTenant()).To(Equal(usersGroup))
 			for _, tc := range []struct {
 				name      string
 				reference *publicv1.DiskImageReference
 				code      codes.Code
 			}{
 				{"mismatched ID and name", publicv1.DiskImageReference_builder{Id: local.GetId(), Name: "disagrees"}.Build(), codes.InvalidArgument},
-				{"shared image in an invalid project", publicv1.DiskImageReference_builder{Name: name, Shared: true, Project: "invalid"}.Build(), codes.NotFound},
+				{"shared image in an invalid project", publicv1.DiskImageReference_builder{Name: name, Tenant: "shared", Project: "invalid"}.Build(), codes.NotFound},
 			} {
 				By(tc.name)
 				_, err := client.Update(ctx, publicv1.ComputeInstanceCatalogItemsUpdateRequest_builder{
@@ -1203,7 +1203,7 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 					Id: item.GetId(),
 					Fields: publicv1.ComputeInstanceCatalogItemFields_builder{
 						DiskImage: publicv1.DiskImageReferenceFieldPolicy_builder{
-							Locked: publicv1.DiskImageReference_builder{Name: name, Shared: true}.Build(),
+							Locked: publicv1.DiskImageReference_builder{Name: name, Tenant: "shared"}.Build(),
 						}.Build(),
 					}.Build(),
 				}.Build(),
@@ -1290,8 +1290,8 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 			return publicv1.Metadata_builder{Name: catalogItemFixtureName(), Tenant: tenant}.Build()
 		}
 
-		DescribeTable("accepts Templates from the catalog item's tenant or the shared tenant",
-			func(ctx context.Context, catalogTenant, templateTenant string, shouldSucceed bool) {
+		DescribeTable("accepts Templates in the selected visible tenant",
+			func(ctx context.Context, catalogTenant, templateTenant string) {
 				templates := privatev1.NewComputeInstanceTemplatesClient(tool.InternalView().AdminConn())
 				created, err := templates.Create(ctx, privatev1.ComputeInstanceTemplatesCreateRequest_builder{
 					Object: privatev1.ComputeInstanceTemplate_builder{
@@ -1311,30 +1311,22 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 
 				candidate := publicv1.ComputeInstanceCatalogItem_builder{
 					Metadata: catalogItemMetadata(catalogTenant),
-					Template: publicv1.ComputeInstanceTemplateReference_builder{Id: templateID}.Build(),
+					Template: publicv1.ComputeInstanceTemplateReference_builder{Id: templateID, Tenant: templateTenant}.Build(),
 				}.Build()
-				client := publicv1.NewComputeInstanceCatalogItemsClient(tool.ExternalView().AdminConn())
-				if !shouldSucceed {
-					_, err := client.Create(ctx, publicv1.ComputeInstanceCatalogItemsCreateRequest_builder{
-						Object: candidate,
-					}.Build())
-					expectCatalogItemStatusCode(err, codes.InvalidArgument)
-					return
-				}
 				item := createComputeInstanceCatalogItemFixture(ctx, tool.ExternalView().AdminConn(), candidate)
 				Expect(item.GetMetadata().GetTenant()).To(Equal(catalogTenant))
 				Expect(item.GetTemplate().GetId()).To(Equal(templateID))
-				Expect(item.GetTemplate().GetShared()).To(Equal(templateTenant == "shared"))
+				Expect(item.GetTemplate().GetTenant()).To(Equal(templateTenant))
 			},
-			Entry("a tenant catalog item accepts a Template from its tenant", usersGroup, usersGroup, true),
-			Entry("a tenant catalog item accepts a shared Template", usersGroup, "shared", true),
-			Entry("a tenant catalog item rejects another tenant's Template", usersGroup, otherTenant, false),
-			Entry("a shared catalog item accepts a shared Template", "shared", "shared", true),
-			Entry("a shared catalog item rejects a tenant's Template", "shared", usersGroup, false),
+			Entry("a tenant catalog item selects a Template from its tenant", usersGroup, usersGroup),
+			Entry("a tenant catalog item selects a shared Template", usersGroup, "shared"),
+			Entry("a tenant catalog item selects a Template from another visible tenant", usersGroup, otherTenant),
+			Entry("a shared catalog item selects a shared Template", "shared", "shared"),
+			Entry("a shared catalog item selects a visible tenant Template", "shared", usersGroup),
 		)
 
-		DescribeTable("accepts disk images from the catalog item's tenant or the shared tenant",
-			func(ctx context.Context, catalogTenant, imageTenant string, shouldSucceed bool) {
+		DescribeTable("accepts disk images in the selected visible tenant",
+			func(ctx context.Context, catalogTenant, imageTenant string) {
 				template := createCatalogItemComputeInstanceTemplateFixture(ctx, nil, nil)
 				image := createCatalogItemDiskImageFixture(ctx, imageTenant, catalogItemFixtureName())
 				candidate := publicv1.ComputeInstanceCatalogItem_builder{
@@ -1342,29 +1334,21 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 					Template: publicv1.ComputeInstanceTemplateReference_builder{Id: template}.Build(),
 					Fields: publicv1.ComputeInstanceCatalogItemFields_builder{
 						DiskImage: publicv1.DiskImageReferenceFieldPolicy_builder{
-							Locked: publicv1.DiskImageReference_builder{Id: image.GetId()}.Build(),
+							Locked: publicv1.DiskImageReference_builder{Id: image.GetId(), Tenant: imageTenant}.Build(),
 						}.Build(),
 					}.Build(),
 				}.Build()
-				client := publicv1.NewComputeInstanceCatalogItemsClient(tool.ExternalView().AdminConn())
-				if !shouldSucceed {
-					_, err := client.Create(ctx, publicv1.ComputeInstanceCatalogItemsCreateRequest_builder{
-						Object: candidate,
-					}.Build())
-					expectCatalogItemStatusCode(err, codes.InvalidArgument)
-					return
-				}
 				item := createComputeInstanceCatalogItemFixture(ctx, tool.ExternalView().AdminConn(), candidate)
 				Expect(item.GetMetadata().GetTenant()).To(Equal(catalogTenant))
 				resolved := item.GetFields().GetDiskImage().GetLocked()
 				Expect(resolved.GetId()).To(Equal(image.GetId()))
-				Expect(resolved.GetShared()).To(Equal(imageTenant == "shared"))
+				Expect(resolved.GetTenant()).To(Equal(imageTenant))
 			},
-			Entry("a tenant catalog item accepts an image from its tenant", usersGroup, usersGroup, true),
-			Entry("a tenant catalog item accepts a shared image", usersGroup, "shared", true),
-			Entry("a tenant catalog item rejects another tenant's image", usersGroup, otherTenant, false),
-			Entry("a shared catalog item accepts a shared image", "shared", "shared", true),
-			Entry("a shared catalog item rejects a tenant's image", "shared", usersGroup, false),
+			Entry("a tenant catalog item selects an image from its tenant", usersGroup, usersGroup),
+			Entry("a tenant catalog item selects a shared image", usersGroup, "shared"),
+			Entry("a tenant catalog item selects an image from another visible tenant", usersGroup, otherTenant),
+			Entry("a shared catalog item selects a shared image", "shared", "shared"),
+			Entry("a shared catalog item selects a visible tenant image", "shared", usersGroup),
 		)
 
 		type subnetPolicyKind int
@@ -1665,13 +1649,13 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 			Expect(privateUpdated.GetObject().GetSpec().GetRunStrategy()).To(Equal(privatev1.ComputeInstanceRunStrategy_COMPUTE_INSTANCE_RUN_STRATEGY_HALTED))
 
 			By("rejecting public provenance mutation through whole-field and nested masks")
-			for _, mask := range []string{"spec.catalog_item", "spec.catalog_item.name", "spec.catalog_item.shared"} {
+			for _, mask := range []string{"spec.catalog_item", "spec.catalog_item.name", "spec.catalog_item.tenant"} {
 				By(mask)
 				_, e = client.Update(ctx, publicv1.ComputeInstancesUpdateRequest_builder{
 					Object: publicv1.ComputeInstance_builder{
 						Id: first.GetId(),
 						Spec: publicv1.ComputeInstanceSpec_builder{
-							CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Id: item.GetId(), Name: "different", Shared: false}.Build(),
+							CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Id: item.GetId(), Name: "different", Tenant: ""}.Build(),
 						}.Build(),
 					}.Build(),
 					UpdateMask: catalogItemUpdateMask(mask),

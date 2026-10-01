@@ -461,7 +461,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 
 var _ = Describe("Bare Metal Instance Catalog Item policy application", func() {
 	It("applies every Bare Metal policy and deep-clones lists and messages", func() {
-		instanceType := privatev1.BareMetalInstanceTypeReference_builder{Id: "host-id", Name: "host", Shared: true}.Build()
+		instanceType := privatev1.BareMetalInstanceTypeReference_builder{Id: "host-id", Name: "host", Tenant: auth.SharedTenant}.Build()
 		diskImage := privatev1.DiskImageReference_builder{Id: "image-id", Name: "disk-image"}.Build()
 		attachment := privatev1.BareMetalNetworkAttachment_builder{
 			Subnet:         policyTestSubnet("bare-metal-subnet"),

@@ -29,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file osac/public/v1/external_ip_pool_type.proto.
  */
 export const file_osac_public_v1_external_ip_pool_type: GenFile = /*@__PURE__*/
-  fileDesc("Cipvc2FjL3B1YmxpYy92MS9leHRlcm5hbF9pcF9wb29sX3R5cGUucHJvdG8SDm9zYWMucHVibGljLnYxIrABCg5FeHRlcm5hbElQUG9vbBIKCgJpZBgBIAEoCRIqCghtZXRhZGF0YRgCIAEoCzIYLm9zYWMucHVibGljLnYxLk1ldGFkYXRhEjAKBHNwZWMYAyABKAsyIi5vc2FjLnB1YmxpYy52MS5FeHRlcm5hbElQUG9vbFNwZWMSNAoGc3RhdHVzGAQgASgLMiQub3NhYy5wdWJsaWMudjEuRXh0ZXJuYWxJUFBvb2xTdGF0dXMiVQoSRXh0ZXJuYWxJUFBvb2xTcGVjEj8KCWlwX2ZhbWlseRgDIAEoDjIYLm9zYWMucHVibGljLnYxLklQRmFtaWx5QhLgQQLgQQW6SAmCAQYQASAAIAIiLgoURXh0ZXJuYWxJUFBvb2xTdGF0dXMSFgoJYXZhaWxhYmxlGAYgASgDQgPgQQMiVAoXRXh0ZXJuYWxJUFBvb2xSZWZlcmVuY2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEg4KBnNoYXJlZBgEIAEoCGIGcHJvdG8z", [file_buf_validate_validate, file_google_api_field_behavior, file_osac_public_v1_ip_family_type, file_osac_public_v1_metadata_type]);
+  fileDesc("Cipvc2FjL3B1YmxpYy92MS9leHRlcm5hbF9pcF9wb29sX3R5cGUucHJvdG8SDm9zYWMucHVibGljLnYxIrABCg5FeHRlcm5hbElQUG9vbBIKCgJpZBgBIAEoCRIqCghtZXRhZGF0YRgCIAEoCzIYLm9zYWMucHVibGljLnYxLk1ldGFkYXRhEjAKBHNwZWMYAyABKAsyIi5vc2FjLnB1YmxpYy52MS5FeHRlcm5hbElQUG9vbFNwZWMSNAoGc3RhdHVzGAQgASgLMiQub3NhYy5wdWJsaWMudjEuRXh0ZXJuYWxJUFBvb2xTdGF0dXMiVQoSRXh0ZXJuYWxJUFBvb2xTcGVjEj8KCWlwX2ZhbWlseRgDIAEoDjIYLm9zYWMucHVibGljLnYxLklQRmFtaWx5QhLgQQLgQQW6SAmCAQYQASAAIAIiLgoURXh0ZXJuYWxJUFBvb2xTdGF0dXMSFgoJYXZhaWxhYmxlGAYgASgDQgPgQQMiYgoXRXh0ZXJuYWxJUFBvb2xSZWZlcmVuY2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEg4KBnRlbmFudBgFIAEoCUoECAQQBVIGc2hhcmVkYgZwcm90bzM", [file_buf_validate_validate, file_google_api_field_behavior, file_osac_public_v1_ip_family_type, file_osac_public_v1_metadata_type]);
 
 /**
  * Represents a pool of external IP addresses available for allocation.
@@ -160,9 +160,11 @@ export type ExternalIPPoolReference = Message<"osac.public.v1.ExternalIPPoolRefe
   project: string;
 
   /**
-   * @generated from field: bool shared = 4;
+   * Tenant selector for name-based resolution. ID-only references may omit it and use caller visibility.
+   *
+   * @generated from field: string tenant = 5;
    */
-  shared: boolean;
+  tenant: string;
 };
 
 /**

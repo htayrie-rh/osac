@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file osac/public/v1/host_type_type.proto.
  */
 export const file_osac_public_v1_host_type_type: GenFile = /*@__PURE__*/
-  fileDesc("CiNvc2FjL3B1YmxpYy92MS9ob3N0X3R5cGVfdHlwZS5wcm90bxIOb3NhYy5wdWJsaWMudjEinAEKCEhvc3RUeXBlEgoKAmlkGAEgASgJEioKCG1ldGFkYXRhGAIgASgLMhgub3NhYy5wdWJsaWMudjEuTWV0YWRhdGESDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSNAoKaW50ZXJmYWNlcxgFIAMoCzIgLm9zYWMucHVibGljLnYxLk5ldHdvcmtJbnRlcmZhY2UiQwoQTmV0d29ya0ludGVyZmFjZRIMCgRuYW1lGAEgASgJEgwKBHJvbGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiTgoRSG9zdFR5cGVSZWZlcmVuY2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEg4KBnNoYXJlZBgEIAEoCGIGcHJvdG8z", [file_osac_public_v1_metadata_type]);
+  fileDesc("CiNvc2FjL3B1YmxpYy92MS9ob3N0X3R5cGVfdHlwZS5wcm90bxIOb3NhYy5wdWJsaWMudjEinAEKCEhvc3RUeXBlEgoKAmlkGAEgASgJEioKCG1ldGFkYXRhGAIgASgLMhgub3NhYy5wdWJsaWMudjEuTWV0YWRhdGESDQoFdGl0bGUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSNAoKaW50ZXJmYWNlcxgFIAMoCzIgLm9zYWMucHVibGljLnYxLk5ldHdvcmtJbnRlcmZhY2UiQwoQTmV0d29ya0ludGVyZmFjZRIMCgRuYW1lGAEgASgJEgwKBHJvbGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiXAoRSG9zdFR5cGVSZWZlcmVuY2USCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEg4KBnRlbmFudBgFIAEoCUoECAQQBVIGc2hhcmVkYgZwcm90bzM", [file_osac_public_v1_metadata_type]);
 
 /**
  * Describes a set of hosts that share characteristics.
@@ -155,9 +155,11 @@ export type HostTypeReference = Message<"osac.public.v1.HostTypeReference"> & {
   project: string;
 
   /**
-   * @generated from field: bool shared = 4;
+   * Tenant selector for name-based resolution. ID-only references may omit it and use caller visibility.
+   *
+   * @generated from field: string tenant = 5;
    */
-  shared: boolean;
+  tenant: string;
 };
 
 /**
