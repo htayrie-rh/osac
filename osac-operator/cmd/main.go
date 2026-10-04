@@ -487,7 +487,7 @@ func setupComputeInstanceControllers(
 }
 
 // setupTenantController registers the Tenant lifecycle and feedback controllers.
-func setupTenantController(mgr mcmanager.Manager, grpcConn *grpc.ClientConn) error {
+func setupTenantController(mgr mcmanager.Manager, grpcConn grpc.ClientConnInterface) error {
 	tenantNamespace := os.Getenv(envTenantNamespace)
 
 	if err := (controller.NewTenantReconciler(
