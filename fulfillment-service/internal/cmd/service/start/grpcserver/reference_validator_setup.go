@@ -14,10 +14,12 @@ language governing permissions and limitations under the License.
 package grpcserver
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/references"
@@ -34,7 +36,9 @@ import (
 func newReferenceValidator(logger *slog.Logger, tenancy auth.TenancyLogic, registerer prometheus.Registerer) (*references.ReferenceValidator, error) {
 	validator, err := references.NewReferenceValidator().SetLogger(logger).SetMetricsRegisterer(registerer).
 		SetDefaultTenantResolver(tenancy.DetermineDefaultTenant).
-		SetOwnerScopeResolver(resolveUpdateOwnerScope).
+		SetOwnerScopeResolver(func(ctx context.Context, objectType protoreflect.FullName, id string) (string, string, error) {
+			return resolveUpdateOwnerScope(ctx, objectType, id, tenancy)
+		}).
 		SetExcludedReferencePaths(catalogProvenanceUpdateMethods(), "object.spec.catalog_item").
 		SetExcludedReferencePaths(catalogAuthoringMethods(), "object.template", "object.fields").
 		SetExcludedReferencePaths(catalogCreationSourceMethods(), "object.spec.catalog_item", "object.spec.template").

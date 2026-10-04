@@ -333,10 +333,12 @@ func registerReferenceLookups(
 	return nil
 }
 
-// resolveUpdateOwnerScope fetches the current resource scope for sparse Update requests. Generic
-// DAO tables use the plural snake_case protobuf object name, so this uses the same naming rule.
+// resolveUpdateOwnerScope fetches the current resource scope for sparse Update requests. It only
+// returns that scope when the caller can see the owner, and gives invisible and missing owners the
+// same error so reference validation cannot be used to probe resource IDs. Generic DAO tables use
+// the plural snake_case protobuf object name, so this uses the same naming rule.
 func resolveUpdateOwnerScope(ctx context.Context, objectType protoreflect.FullName,
-	id string) (tenant, project string, err error) {
+	id string, tenancyLogic auth.TenancyLogic) (tenant, project string, err error) {
 	if id == "" {
 		return "", "", fmt.Errorf("object identifier is missing")
 	}
@@ -353,6 +355,13 @@ func resolveUpdateOwnerScope(ctx context.Context, objectType protoreflect.FullNa
 			return "", "", grpcstatus.Error(grpccodes.NotFound, "resource not found")
 		}
 		return "", "", fmt.Errorf("failed to fetch owner scope from %s: %w", table, err)
+	}
+	visibility, err := tenancyLogic.DetermineVisibility(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to determine visibility for owner scope: %w", err)
+	}
+	if !visibility.IsProjectVisible(tenant, project) {
+		return "", "", grpcstatus.Error(grpccodes.NotFound, "resource not found")
 	}
 	return tenant, project, nil
 }

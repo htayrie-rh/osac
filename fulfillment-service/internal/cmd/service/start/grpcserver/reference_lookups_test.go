@@ -15,6 +15,7 @@ package grpcserver
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"slices"
@@ -26,9 +27,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/database"
@@ -93,12 +96,56 @@ var _ = Describe("RegisterReferenceLookups", func() {
 				"SecretLocalReference is not registered with the interceptor: %v", err)
 		}
 	})
+
+	It("hides invisible owners when validating sparse Update references", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		tenancy := auth.NewMockTenancyLogic(ctrl)
+		visibility, err := auth.NewVisibility().AddVisibleTenant("tenant-a").Build()
+		Expect(err).ToNot(HaveOccurred())
+		tenancy.EXPECT().DetermineVisibility(gomock.Any()).Return(visibility, nil)
+
+		tx := database.NewMockTx(ctrl)
+		tx.EXPECT().QueryRow(gomock.Any(), gomock.Any(), "binding-1").Return(ownerScopeTestRow{})
+		ctx := database.TxIntoContext(context.Background(), tx)
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+		validator, err := newReferenceValidator(logger, tenancy, prometheus.NewRegistry())
+		Expect(err).ToNot(HaveOccurred())
+
+		request := privatev1.RoleBindingsUpdateRequest_builder{
+			Object: privatev1.RoleBinding_builder{
+				Id: "binding-1",
+				Spec: privatev1.RoleBindingSpec_builder{
+					Role: privatev1.RoleReference_builder{Name: "role"}.Build(),
+				}.Build(),
+			}.Build(),
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"spec.role"}},
+		}.Build()
+		handlerCalled := false
+
+		_, err = validator.UnaryServer(
+			ctx,
+			request,
+			&grpc.UnaryServerInfo{FullMethod: privatev1.RoleBindings_Update_FullMethodName},
+			func(context.Context, any) (any, error) {
+				handlerCalled = true
+				return "ok", nil
+			},
+		)
+
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.NotFound))
+		Expect(grpcstatus.Convert(err).Message()).To(Equal("resource not found"))
+		Expect(handlerCalled).To(BeFalse())
+	})
 })
 
 var _ = Describe("resolveUpdateOwnerScope", func() {
-	It("queries the stored owner scope from the resource table", func() {
+	It("queries the stored owner scope when visible to the caller", func() {
 		ctrl := gomock.NewController(GinkgoT())
 		tx := database.NewMockTx(ctrl)
+		tenancy := auth.NewMockTenancyLogic(ctrl)
+		visibility, err := auth.NewVisibility().AddVisibleProject("tenant-b", "project-b").Build()
+		Expect(err).ToNot(HaveOccurred())
+		tenancy.EXPECT().DetermineVisibility(gomock.Any()).Return(visibility, nil)
 		ctx := database.TxIntoContext(context.Background(), tx)
 		tx.EXPECT().QueryRow(gomock.Any(), gomock.Any(), "binding-1").DoAndReturn(
 			func(_ context.Context, query string, _ ...any) pgx.Row {
@@ -107,11 +154,62 @@ var _ = Describe("resolveUpdateOwnerScope", func() {
 			},
 		)
 
-		tenant, project, err := resolveUpdateOwnerScope(ctx, "osac.private.v1.RoleBinding", "binding-1")
+		tenant, project, err := resolveUpdateOwnerScope(ctx, "osac.private.v1.RoleBinding", "binding-1", tenancy)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(tenant).To(Equal("tenant-b"))
 		Expect(project).To(Equal("project-b"))
+	})
+
+	It("returns the same not-found error for invisible and missing owners", func() {
+		visibility, err := auth.NewVisibility().AddVisibleTenant("tenant-a").Build()
+		Expect(err).ToNot(HaveOccurred())
+
+		var messages []string
+		for _, tc := range []struct {
+			name string
+			row  pgx.Row
+		}{
+			{
+				name: "invisible owner",
+				row:  ownerScopeTestRow{},
+			},
+			{
+				name: "missing owner",
+				row:  ownerScopeErrorTestRow{err: pgx.ErrNoRows},
+			},
+		} {
+			By(tc.name)
+			ctrl := gomock.NewController(GinkgoT())
+			tx := database.NewMockTx(ctrl)
+			tenancy := auth.NewMockTenancyLogic(ctrl)
+			tenancy.EXPECT().DetermineVisibility(gomock.Any()).Return(visibility, nil).MaxTimes(1)
+			tx.EXPECT().QueryRow(gomock.Any(), gomock.Any(), "binding-1").Return(tc.row)
+			ctx := database.TxIntoContext(context.Background(), tx)
+
+			tenant, project, err := resolveUpdateOwnerScope(ctx, "osac.private.v1.RoleBinding", "binding-1", tenancy)
+			Expect(tenant).To(BeEmpty())
+			Expect(project).To(BeEmpty())
+			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.NotFound))
+			messages = append(messages, grpcstatus.Convert(err).Message())
+		}
+
+		Expect(messages).To(Equal([]string{"resource not found", "resource not found"}))
+	})
+
+	It("does not return owner scope when caller visibility cannot be determined", func() {
+		ctrl := gomock.NewController(GinkgoT())
+		tx := database.NewMockTx(ctrl)
+		tenancy := auth.NewMockTenancyLogic(ctrl)
+		tx.EXPECT().QueryRow(gomock.Any(), gomock.Any(), "binding-1").Return(ownerScopeTestRow{})
+		tenancy.EXPECT().DetermineVisibility(gomock.Any()).Return(nil, errors.New("visibility unavailable"))
+		ctx := database.TxIntoContext(context.Background(), tx)
+
+		tenant, project, err := resolveUpdateOwnerScope(ctx, "osac.private.v1.RoleBinding", "binding-1", tenancy)
+
+		Expect(err).To(MatchError(ContainSubstring("failed to determine visibility")))
+		Expect(tenant).To(BeEmpty())
+		Expect(project).To(BeEmpty())
 	})
 })
 
@@ -121,6 +219,14 @@ func (ownerScopeTestRow) Scan(dest ...any) error {
 	*dest[0].(*string) = "tenant-b"
 	*dest[1].(*string) = "project-b"
 	return nil
+}
+
+type ownerScopeErrorTestRow struct {
+	err error
+}
+
+func (r ownerScopeErrorTestRow) Scan(...any) error {
+	return r.err
 }
 
 func isHandlerOwnedReferenceType(name protoreflect.FullName) bool {
