@@ -658,7 +658,8 @@ There are two kinds of references:
 
 ### Full references
 
-Full references can point to objects in a different tenant or project. They have five fields:
+Full references can point to objects in a different tenant or project. They have four fields; field
+number 4 is reserved:
 
 ```protobuf
 message ClusterTemplateReference {
