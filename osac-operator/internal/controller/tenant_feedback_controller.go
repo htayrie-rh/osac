@@ -41,7 +41,7 @@ type TenantFeedbackReconciler struct {
 }
 
 // NewTenantFeedbackReconciler creates a Tenant feedback reconciler.
-func NewTenantFeedbackReconciler(hubClient clnt.Client, grpcConn *grpc.ClientConn, tenantNamespace string) *TenantFeedbackReconciler {
+func NewTenantFeedbackReconciler(hubClient clnt.Client, grpcConn grpc.ClientConnInterface, tenantNamespace string) *TenantFeedbackReconciler {
 	return &TenantFeedbackReconciler{
 		hubClient:       hubClient,
 		tenantsClient:   privatev1.NewTenantsClient(grpcConn),
