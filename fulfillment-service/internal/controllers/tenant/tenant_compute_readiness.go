@@ -16,7 +16,6 @@ package tenant
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	clnt "sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +25,16 @@ import (
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
 
+const (
+	reasonInfrastructureReady          = "InfrastructureReady"
+	reasonInfrastructurePending        = "InfrastructurePending"
+	reasonInfrastructureFailed         = "InfrastructureFailed"
+	reasonInfrastructureDeleting       = "InfrastructureDeleting"
+	reasonInfrastructureStatusUnknown  = "InfrastructureStatusUnknown"
+	reasonInfrastructureNotProvisioned = "InfrastructureNotProvisioned"
+)
+
+// checkComputeInfrastructureReadiness updates the tenant condition from hub Tenant CRs.
 func (t *task) checkComputeInfrastructureReadiness(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -36,9 +45,9 @@ func (t *task) checkComputeInfrastructureReadiness(ctx context.Context) {
 	tenantID := t.tenant.GetId()
 	tenantName := t.tenant.GetMetadata().GetName()
 	var observed, incomplete, pending, failed, deleting bool
-	reportError := func(err error) {
+	reportError := func(_ error) {
 		incomplete = true
-		t.r.logger.ErrorContext(ctx, "Failed to observe tenant compute infrastructure", slog.String("tenant_id", t.tenant.GetId()), slog.Any("error", err))
+		t.r.logger.ErrorContext(ctx, "Failed to observe tenant compute infrastructure")
 	}
 	if tenantID == "" || tenantName == "" {
 		reportError(fmt.Errorf("tenant identity is incomplete"))
@@ -93,23 +102,24 @@ func (t *task) checkComputeInfrastructureReadiness(ctx context.Context) {
 	var reason, message string
 	switch {
 	case failed:
-		reason, message = "InfrastructureFailed", "Tenant compute infrastructure preparation failed"
+		reason, message = reasonInfrastructureFailed, "Tenant compute infrastructure preparation failed"
 	case deleting:
-		reason, message = "InfrastructureDeleting", "Tenant compute infrastructure is being removed"
+		reason, message = reasonInfrastructureDeleting, "Tenant compute infrastructure is being removed"
 	case pending:
-		reason, message = "InfrastructurePending", "Tenant compute infrastructure is still being prepared"
+		reason, message = reasonInfrastructurePending, "Tenant compute infrastructure is still being prepared"
 	case incomplete:
 		conditionStatus = privatev1.ConditionStatus_CONDITION_STATUS_UNSPECIFIED
-		reason, message = "InfrastructureStatusUnknown", "Tenant compute infrastructure readiness could not be determined"
+		reason, message = reasonInfrastructureStatusUnknown, "Tenant compute infrastructure readiness could not be determined"
 	case observed:
 		conditionStatus = privatev1.ConditionStatus_CONDITION_STATUS_TRUE
-		reason, message = "InfrastructureReady", "Tenant compute infrastructure is ready on all participating hubs"
+		reason, message = reasonInfrastructureReady, "Tenant compute infrastructure is ready on all participating hubs"
 	default:
-		reason, message = "InfrastructureNotProvisioned", "Tenant compute infrastructure has not been provisioned"
+		reason, message = reasonInfrastructureNotProvisioned, "Tenant compute infrastructure has not been provisioned"
 	}
 	t.updateCondition(conditionType, conditionStatus, reason, message)
 }
 
+// readTenantInfrastructure finds the Tenant CR for a fulfillment tenant on one hub.
 func (r *function) readTenantInfrastructure(ctx context.Context, hubID, tenantID, tenantName string) (*osacv1alpha1.Tenant, error) {
 	entry, err := r.hubCache.Get(ctx, hubID)
 	if err != nil {

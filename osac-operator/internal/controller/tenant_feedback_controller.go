@@ -23,6 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	clnt "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -48,6 +49,7 @@ func NewTenantFeedbackReconciler(hubClient clnt.Client, grpcConn *grpc.ClientCon
 	}
 }
 
+// tenantStatusChangedPredicate triggers feedback for status, deletion, or ID-label changes.
 func tenantStatusChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		UpdateFunc: func(update event.UpdateEvent) bool {
@@ -57,7 +59,8 @@ func tenantStatusChangedPredicate() predicate.Predicate {
 				return true
 			}
 			return !equality.Semantic.DeepEqual(oldObject.Status, newObject.Status) ||
-				!equality.Semantic.DeepEqual(oldObject.DeletionTimestamp, newObject.DeletionTimestamp)
+				!equality.Semantic.DeepEqual(oldObject.DeletionTimestamp, newObject.DeletionTimestamp) ||
+				oldObject.GetLabels()[osacTenantIDLabel] != newObject.GetLabels()[osacTenantIDLabel]
 		},
 	}
 }
@@ -90,7 +93,27 @@ func (r *TenantFeedbackReconciler) Reconcile(ctx context.Context, request ctrl.R
 
 	tenantID := object.GetLabels()[osacTenantIDLabel]
 	if tenantID == "" {
+		if !object.GetDeletionTimestamp().IsZero() && controllerutil.ContainsFinalizer(object, osacTenantFeedbackFinalizer) {
+			controllerutil.RemoveFinalizer(object, osacTenantFeedbackFinalizer)
+			return ctrl.Result{}, r.hubClient.Update(ctx, object)
+		}
 		ctrllog.FromContext(ctx).Info("Tenant CR has no fulfillment identifier", "label", osacTenantIDLabel)
+		return ctrl.Result{}, nil
+	}
+
+	if object.GetDeletionTimestamp().IsZero() {
+		if controllerutil.AddFinalizer(object, osacTenantFeedbackFinalizer) {
+			if err := r.hubClient.Update(ctx, object); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+	} else {
+		if _, err := r.tenantsClient.Signal(ctx, privatev1.TenantsSignalRequest_builder{Id: tenantID}.Build()); err != nil {
+			return ctrl.Result{}, err
+		}
+		if controllerutil.RemoveFinalizer(object, osacTenantFeedbackFinalizer) {
+			return ctrl.Result{}, r.hubClient.Update(ctx, object)
+		}
 		return ctrl.Result{}, nil
 	}
 

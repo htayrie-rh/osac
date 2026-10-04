@@ -20,11 +20,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -87,6 +89,14 @@ var _ = Describe("tenantStatusChangedPredicate", func() {
 		newObject := oldObject.DeepCopy()
 		now := metav1.Now()
 		newObject.DeletionTimestamp = &now
+
+		Expect(predicate.Update(event.UpdateEvent{ObjectOld: oldObject, ObjectNew: newObject})).To(BeTrue())
+	})
+
+	It("passes fulfillment identifier label changes", func() {
+		oldObject := &v1alpha1.Tenant{}
+		newObject := oldObject.DeepCopy()
+		newObject.Labels = map[string]string{osacTenantIDLabel: "tenant-id"}
 
 		Expect(predicate.Update(event.UpdateEvent{ObjectOld: oldObject, ObjectNew: newObject})).To(BeTrue())
 	})
@@ -162,7 +172,45 @@ var _ = Describe("TenantFeedbackReconciler", func() {
 		Expect(tenantsClient.signalIDs).To(Equal([]string{tenantID}))
 		updated := &v1alpha1.Tenant{}
 		Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
-		Expect(updated.Finalizers).To(BeEmpty())
+		Expect(controllerutil.ContainsFinalizer(updated, osacTenantFeedbackFinalizer)).To(BeTrue())
+	})
+
+	It("signals and removes the feedback finalizer during deletion", func() {
+		object := &v1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
+			Name: tenantName, Namespace: tenantNamespace,
+			Labels:     map[string]string{osacTenantIDLabel: tenantID},
+			Finalizers: []string{osacTenantFeedbackFinalizer},
+		}}
+		Expect(k8sClient.Create(ctx, object)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, object)).To(Succeed())
+
+		result, err := reconciler.Reconcile(ctx, request)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsZero()).To(BeTrue())
+		Expect(tenantsClient.signalIDs).To(Equal([]string{tenantID}))
+		updated := &v1alpha1.Tenant{}
+		err = k8sClient.Get(ctx, request.NamespacedName, updated)
+		Expect(apierrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("keeps the feedback finalizer when a deletion signal fails", func() {
+		object := &v1alpha1.Tenant{ObjectMeta: metav1.ObjectMeta{
+			Name: tenantName, Namespace: tenantNamespace,
+			Labels:     map[string]string{osacTenantIDLabel: tenantID},
+			Finalizers: []string{osacTenantFeedbackFinalizer},
+		}}
+		Expect(k8sClient.Create(ctx, object)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, object)).To(Succeed())
+		tenantsClient.signalError = errors.New("fulfillment unavailable")
+
+		result, err := reconciler.Reconcile(ctx, request)
+
+		Expect(err).To(MatchError("fulfillment unavailable"))
+		Expect(result.IsZero()).To(BeTrue())
+		updated := &v1alpha1.Tenant{}
+		Expect(k8sClient.Get(ctx, request.NamespacedName, updated)).To(Succeed())
+		Expect(controllerutil.ContainsFinalizer(updated, osacTenantFeedbackFinalizer)).To(BeTrue())
 	})
 
 	It("returns signal failures so controller-runtime retries", func() {

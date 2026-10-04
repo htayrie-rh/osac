@@ -175,12 +175,7 @@ func (r *function) Run(ctx context.Context, tenant *privatev1.Tenant) error {
 		}
 	} else {
 		reconcileErr = task.update(ctx)
-		if reconcileErr != nil {
-			// Failed lifecycle work must not leak partial mutations into the status update.
-			tenant = proto.Clone(oldTenant).(*privatev1.Tenant)
-			task.tenant = tenant
-		}
-		task.checkComputeInfrastructureReadiness(ctx)
+		tenant = task.tenant
 	}
 
 	updateMask := r.maskCalculator.Calculate(oldTenant, tenant)
@@ -201,8 +196,23 @@ type task struct {
 	tenant *privatev1.Tenant
 }
 
-// update performs the reconciliation logic for creating or updating a tenant.
+// update performs the reconciliation logic for creating or updating a tenant,
+// then refreshes compute readiness independently of lifecycle errors.
 func (t *task) update(ctx context.Context) error {
+	oldTenant := proto.Clone(t.tenant).(*privatev1.Tenant)
+	reconcileErr := t.updateLifecycle(ctx)
+	if reconcileErr != nil {
+		// Failed lifecycle work must not leak partial mutations into the status update.
+		t.tenant = oldTenant
+	}
+	if t.r != nil && t.r.hubsClient != nil && t.r.hubCache != nil {
+		t.checkComputeInfrastructureReadiness(ctx)
+	}
+	return reconcileErr
+}
+
+// updateLifecycle performs the normal tenant lifecycle reconciliation.
+func (t *task) updateLifecycle(ctx context.Context) error {
 	if t.addFinalizer() {
 		return nil
 	}
