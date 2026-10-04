@@ -175,7 +175,7 @@ var _ = Describe("Bare Metal Instance Catalog Items", Label("catalog-items"), fu
 				Published: true,
 				Fields: publicv1.BareMetalInstanceCatalogItemFields_builder{
 					InstanceType: publicv1.BareMetalInstanceTypeReferenceFieldPolicy_builder{
-						Locked: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceType, Shared: true}.Build(),
+						Locked: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceType, Tenant: auth.SharedTenant}.Build(),
 					}.Build(),
 					DiskImage: publicv1.DiskImageReferenceFieldPolicy_builder{
 						Locked: publicv1.DiskImageReference_builder{Id: image.GetId()}.Build(),
