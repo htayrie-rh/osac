@@ -312,7 +312,7 @@ var _ = Describe("Networking tenant isolation", func() {
 			}.Build(),
 		}.Build())
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-		Expect(err).To(MatchError(ContainSubstring("belongs to tenant")))
+		Expect(err).To(MatchError(ContainSubstring("not found")))
 	})
 
 	It("accepts Subnet referencing same-tenant VirtualNetwork", func() {
@@ -353,7 +353,7 @@ var _ = Describe("Networking tenant isolation", func() {
 			}.Build(),
 		}.Build())
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-		Expect(err).To(MatchError(ContainSubstring("belongs to tenant")))
+		Expect(err).To(MatchError(ContainSubstring("not found")))
 	})
 
 	It("accepts ExternalIP referencing a shared ExternalIPPool", func() {
@@ -398,7 +398,7 @@ var _ = Describe("Networking tenant isolation", func() {
 			}.Build(),
 		}.Build())
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-		Expect(err).To(MatchError(ContainSubstring("belongs to tenant")))
+		Expect(err).To(MatchError(ContainSubstring("not found")))
 	})
 
 	It("rejects NATGateway referencing ExternalIP from a different tenant", func() {
@@ -420,7 +420,7 @@ var _ = Describe("Networking tenant isolation", func() {
 			}.Build(),
 		}.Build())
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-		Expect(err).To(MatchError(ContainSubstring("belongs to tenant")))
+		Expect(err).To(MatchError(ContainSubstring("not found")))
 	})
 
 	It("rejects ExternalIPAttachment referencing ExternalIP from a different tenant", func() {
@@ -443,6 +443,6 @@ var _ = Describe("Networking tenant isolation", func() {
 			}.Build(),
 		}.Build())
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
-		Expect(err).To(MatchError(ContainSubstring("belongs to tenant")))
+		Expect(err).To(MatchError(ContainSubstring("not found")))
 	})
 })

@@ -23,6 +23,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
@@ -392,7 +393,7 @@ var _ = Describe("Public clusters", func() {
 				}.Build(),
 				Spec: publicv1.ClusterSpec_builder{
 					Template: publicv1.ClusterTemplateReference_builder{Id: templateId}.Build(),
-					Version:  publicv1.ClusterVersionReference_builder{Name: cvName}.Build(),
+					Version:  publicv1.ClusterVersionReference_builder{Name: cvName, Tenant: auth.SharedTenant}.Build(),
 				}.Build(),
 			}.Build(),
 		}.Build())

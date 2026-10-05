@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
@@ -389,7 +390,7 @@ var _ = Describe("DiskImage lifecycle", func() {
 				Id: computeInstanceId,
 				Spec: publicv1.ComputeInstanceSpec_builder{
 					Template:     publicv1.ComputeInstanceTemplateReference_builder{Id: computeInstanceTemplateId}.Build(),
-					InstanceType: publicv1.InstanceTypeReference_builder{Name: instanceTypeId}.Build(),
+					InstanceType: publicv1.InstanceTypeReference_builder{Name: instanceTypeId, Tenant: auth.SharedTenant}.Build(),
 					RunStrategy:  publicv1.ComputeInstanceRunStrategy_COMPUTE_INSTANCE_RUN_STRATEGY_ALWAYS.Enum(),
 					BootDisk: publicv1.ComputeInstanceDisk_builder{
 						SizeGib:     proto.Int32(20),

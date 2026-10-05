@@ -171,8 +171,8 @@ func registerReferenceLookups(
 	if err != nil {
 		return fmt.Errorf("failed to create StorageTier DAO for reference lookups: %w", err)
 	}
-	references.RegisterDAOLookup(validator, "osac.private.v1.StorageTierReference", storageTiersDAO)
-	references.RegisterDAOLookup(validator, "osac.public.v1.StorageTierReference", storageTiersDAO)
+	references.RegisterUnscopedDAOLookup(validator, "osac.private.v1.StorageTierReference", storageTiersDAO)
+	references.RegisterUnscopedDAOLookup(validator, "osac.public.v1.StorageTierReference", storageTiersDAO)
 
 	// Cluster and bare metal references
 	clustersDAO, err := dao.NewGenericDAO[*privatev1.Cluster]().

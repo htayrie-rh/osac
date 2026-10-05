@@ -94,8 +94,8 @@ var _ = Describe("Cluster pull_secret_secret", Label("secrets", "cluster"), func
 		return id, name
 	}
 
-	// createTemplate creates a cluster template with a single required node set. When defaults is
-	// non-nil it is attached as the template's spec_defaults.
+	// createTemplate creates a cluster template in the cluster creator's tenant with a single
+	// required node set. When defaults is non-nil it is attached as the template's spec_defaults.
 	createTemplate := func(ctx context.Context, defaults *privatev1.ClusterTemplateSpecDefaults) string {
 		templateId := fmt.Sprintf("my_template_%s", uuid.New())
 		_, err := templatesClient.Create(ctx, privatev1.ClusterTemplatesCreateRequest_builder{
@@ -104,7 +104,8 @@ var _ = Describe("Cluster pull_secret_secret", Label("secrets", "cluster"), func
 				Title:       "Pull secret template",
 				Description: "Pull secret template.",
 				Metadata: privatev1.Metadata_builder{
-					Name: fmt.Sprintf("test-tmpl-%s", uuid.New()[24:32]),
+					Name:   fmt.Sprintf("test-tmpl-%s", uuid.New()[24:32]),
+					Tenant: usersGroup,
 				}.Build(),
 				Parameters: []*privatev1.ClusterTemplateParameterDefinition{
 					privatev1.ClusterTemplateParameterDefinition_builder{

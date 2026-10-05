@@ -23,6 +23,7 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
@@ -53,38 +54,15 @@ var _ = Describe("Hub kubeconfig_secret", Label("secrets", "hub"), func() {
 		ctx           context.Context
 		hubsClient    privatev1.HubsClient
 		secretsClient privatev1.SecretsClient
-		tenantsClient privatev1.TenantsClient
-		tenantName    string
-		tenantID      string
 	)
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		hubsClient = privatev1.NewHubsClient(tool.InternalView().AdminConn())
 		secretsClient = privatev1.NewSecretsClient(tool.InternalView().AdminConn())
-		tenantsClient = privatev1.NewTenantsClient(tool.InternalView().AdminConn())
-
-		// A fresh, SYNCED tenant guarantees a Vault namespace exists so the kubeconfig secret can be
-		// stored. Hubs live in the shared tenant, but the create-time kubeconfig_secret validation
-		// resolves the reference by id/name via the admin-scoped secrets DAO, which is tenant-agnostic
-		// -- so the secret's tenant does not affect these assertions.
-		tenantName = fmt.Sprintf("hub-sec-%s", uuid.New())
-		createResponse, err := tenantsClient.Create(ctx, privatev1.TenantsCreateRequest_builder{
-			Object: privatev1.Tenant_builder{
-				Metadata: privatev1.Metadata_builder{
-					Name: tenantName,
-				}.Build(),
-			}.Build(),
-		}.Build())
-		Expect(err).ToNot(HaveOccurred())
-		tenantID = createResponse.GetObject().GetId()
-		DeferCleanup(func() {
-			_, _ = tenantsClient.Delete(ctx, privatev1.TenantsDeleteRequest_builder{
-				Id: tenantID,
-			}.Build())
-		})
-		waitForTenantSynced(ctx, tenantsClient, tenantID)
 	})
+
+	// Hubs are shared-scoped, so their local kubeconfig secret references must also be shared-scoped.
 
 	// createKubeconfigSecret creates a Vault-backed secret carrying a kubeconfig payload and returns
 	// its id and name.
@@ -95,7 +73,7 @@ var _ = Describe("Hub kubeconfig_secret", Label("secrets", "hub"), func() {
 				Type: privatev1.SecretType_SECRET_TYPE_KUBECONFIG,
 				Metadata: privatev1.Metadata_builder{
 					Name:   name,
-					Tenant: tenantName,
+					Tenant: auth.SharedTenant,
 				}.Build(),
 				Data: data,
 			}.Build(),

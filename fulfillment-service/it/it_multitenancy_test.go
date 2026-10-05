@@ -302,7 +302,7 @@ var _ = Describe("Multitenancy basic tenant isolation", Ordered, Label("multiten
 
 						return err
 					},
-					grpccodes.InvalidArgument,
+					grpccodes.NotFound,
 				),
 			)
 		})

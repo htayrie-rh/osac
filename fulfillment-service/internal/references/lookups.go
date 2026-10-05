@@ -37,15 +37,15 @@ func (e *errRefNotFound) IsNotFound() bool {
 	return true
 }
 
-// NewDAOLookupFunc creates a ReferenceLookupFunc backed by a GenericDAO. It queries the DAO
-// using a CEL filter that matches by id or metadata.name and returns the resolved reference metadata.
+// NewDAOLookupFunc creates an unscoped ReferenceLookupFunc backed by a GenericDAO. It queries the
+// DAO using a CEL filter that matches by id or metadata.name and returns the resolved reference metadata.
 func NewDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O]) ReferenceLookupFunc {
-	return newDAOLookupFunc(d, true, false)
+	return newDAOLookupFunc(d, false, false)
 }
 
 // NewScopedDAOLookupFunc creates a DAO lookup that additionally constrains references to an
-// explicitly supplied tenant/project. Unscoped ID lookups rely on DAO visibility because IDs
-// are globally unique.
+// explicitly supplied tenant/project. ID lookups without selectors rely on DAO visibility because
+// IDs are globally unique.
 func NewScopedDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O]) ReferenceLookupFunc {
 	return newDAOLookupFunc(d, true, false)
 }
@@ -63,13 +63,16 @@ func newDAOLookupFunc[O dao.Object](d *dao.GenericDAO[O], scopeExplicitTenant, p
 		default:
 			return nil, &errRefNotFound{identifier: "(empty)"}
 		}
-		// Apply tenant and project selectors independently. ID-only references without explicit
-		// selectors retain visibility-based lookup because IDs are globally unique.
-		if scopeExplicitTenant && tenant != "" {
-			filter += fmt.Sprintf(" && this.metadata.tenant == %s", strconv.Quote(tenant))
-		}
-		if project != "" {
-			filter += fmt.Sprintf(" && this.metadata.project == %s", strconv.Quote(project))
+		// A scoped name lookup applies the full effective owner/reference scope, including an
+		// empty project for top-level resources. ID-only lookups without selectors remain global.
+		// Unscoped lookups are used for globally scoped resources such as StorageTier.
+		if scopeExplicitTenant {
+			if tenant != "" {
+				filter += fmt.Sprintf(" && this.metadata.tenant == %s", strconv.Quote(tenant))
+			}
+			if project != "" || (id == "" && name != "") {
+				filter += fmt.Sprintf(" && this.metadata.project == %s", strconv.Quote(project))
+			}
 		}
 		if publishedOnly {
 			filter = PublishedFilter(filter)
@@ -109,9 +112,18 @@ func PublishedFilter(filter string) string {
 	return "this.published == true && !has(this.metadata.deletion_timestamp) && (" + filter + ")"
 }
 
-// RegisterDAOLookup is a convenience that instantiates a DAO lookup and registers it on the
-// validator in one call, using the protobuf full name of the reference message type.
+// RegisterDAOLookup registers a tenant/project-scoped DAO lookup using the protobuf full name of
+// the reference message type.
 func RegisterDAOLookup[O dao.Object](
+	v *ReferenceValidator,
+	fullName protoreflect.FullName,
+	d *dao.GenericDAO[O],
+) {
+	v.Register(fullName, NewScopedDAOLookupFunc(d))
+}
+
+// RegisterUnscopedDAOLookup registers a DAO lookup for globally scoped resources.
+func RegisterUnscopedDAOLookup[O dao.Object](
 	v *ReferenceValidator,
 	fullName protoreflect.FullName,
 	d *dao.GenericDAO[O],
