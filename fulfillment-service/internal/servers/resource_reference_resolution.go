@@ -499,11 +499,12 @@ func resourceLookupError(err error, kind, identifier, source string, notFoundCod
 }
 
 // canonicalComputeInstanceTemplateReference copies the resolved object's ID, name,
-// project, and shared-tenant selector into a new reference.
+// tenant, project, and legacy shared selector into a new reference.
 func canonicalComputeInstanceTemplateReference(resolved *privatev1.ComputeInstanceTemplate) *privatev1.ComputeInstanceTemplateReference {
 	return privatev1.ComputeInstanceTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
@@ -515,6 +516,7 @@ func canonicalClusterTemplateReference(resolved *privatev1.ClusterTemplate) *pri
 	return privatev1.ClusterTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
@@ -526,6 +528,7 @@ func canonicalBareMetalInstanceTemplateReference(resolved *privatev1.BareMetalIn
 	return privatev1.BareMetalInstanceTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
@@ -537,6 +540,7 @@ func canonicalInstanceTypeReference(resolved *privatev1.InstanceType) *privatev1
 	return privatev1.InstanceTypeReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
@@ -548,6 +552,7 @@ func canonicalDiskImageReference(resolved *privatev1.DiskImage) *privatev1.DiskI
 	return privatev1.DiskImageReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
@@ -569,6 +574,7 @@ func canonicalBareMetalInstanceTypeReference(resolved *privatev1.BareMetalInstan
 	return privatev1.BareMetalInstanceTypeReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
+		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
 		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
