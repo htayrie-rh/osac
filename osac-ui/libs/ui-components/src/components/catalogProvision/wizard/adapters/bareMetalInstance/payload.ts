@@ -26,7 +26,7 @@ export const buildBareMetalInstanceCreatePayload = (
       ...(values.spec.instanceType.name && {
         instanceType: {
           name: values.spec.instanceType.name,
-          shared: true,
+          tenant: 'shared',
         },
       }),
       diskImage: {
