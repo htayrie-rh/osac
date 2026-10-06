@@ -115,7 +115,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			Expect(object.GetId()).ToNot(BeEmpty())
 			Expect(object.GetTitle()).To(Equal("My catalog item"))
 			Expect(object.GetTemplate().GetId()).To(Equal("my-shared-template-id"))
-			Expect(object.GetTemplate().GetShared()).To(BeTrue())
+			Expect(object.GetTemplate().GetTenant()).To(Equal("shared"))
 			Expect(object.GetPublished()).To(BeTrue())
 			Expect(object.GetMetadata().GetTenant()).To(Equal(testTenant))
 		})
@@ -468,7 +468,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 
 var _ = Describe("Bare Metal Instance Catalog Item policy application", func() {
 	It("applies every Bare Metal policy and deep-clones lists and messages", func() {
-		instanceType := privatev1.BareMetalInstanceTypeReference_builder{Id: "host-id", Name: "host", Shared: true}.Build()
+		instanceType := privatev1.BareMetalInstanceTypeReference_builder{Id: "host-id", Name: "host", Tenant: "shared"}.Build()
 		diskImage := privatev1.DiskImageReference_builder{Id: "image-id", Name: "disk-image"}.Build()
 		attachment := privatev1.BareMetalNetworkAttachment_builder{
 			Subnet:         policyTestSubnet("bare-metal-subnet"),

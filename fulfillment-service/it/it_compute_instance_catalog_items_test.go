@@ -1324,7 +1324,7 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 				item := createComputeInstanceCatalogItemFixture(ctx, tool.ExternalView().AdminConn(), candidate)
 				Expect(item.GetMetadata().GetTenant()).To(Equal(catalogTenant))
 				Expect(item.GetTemplate().GetId()).To(Equal(templateID))
-				Expect(item.GetTemplate().GetShared()).To(Equal(templateTenant == "shared"))
+				Expect(item.GetTemplate().GetTenant()).To(Equal(templateTenant))
 			},
 			Entry("a tenant catalog item accepts a Template from its tenant", usersGroup, usersGroup, true),
 			Entry("a tenant catalog item accepts a shared Template", usersGroup, "shared", true),
@@ -1671,7 +1671,7 @@ var _ = Describe("Compute Instance Catalog Items", Label("catalog-items"), func(
 					Object: publicv1.ComputeInstance_builder{
 						Id: first.GetId(),
 						Spec: publicv1.ComputeInstanceSpec_builder{
-							CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Id: item.GetId(), Name: "different", Shared: false}.Build(),
+							CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Id: item.GetId(), Name: "different", Tenant: ""}.Build(),
 						}.Build(),
 					}.Build(),
 					UpdateMask: catalogItemUpdateMask(mask),

@@ -593,7 +593,7 @@ var _ = Describe("Private clusters server", func() {
 			for i, operator := range operators {
 				Expect(storedOperators[i].GetId()).To(Equal(operator.GetId()))
 				Expect(storedOperators[i].GetName()).To(Equal(operator.GetName()))
-				Expect(storedOperators[i].GetShared()).To(BeTrue())
+				Expect(storedOperators[i].GetTenant()).To(Equal("shared"))
 				Expect(storedOperators[i].GetProject()).To(BeEmpty())
 			}
 		})
@@ -798,14 +798,14 @@ var _ = Describe("Private clusters server", func() {
 			seedAddOnOperatorObject(ctx, local)
 
 			object, err := createClusterWithAddOnOperators(ctx, server, []*privatev1.AddOnOperatorReference{
-				privatev1.AddOnOperatorReference_builder{Name: "same-operator-name", Shared: true}.Build(),
+				privatev1.AddOnOperatorReference_builder{Name: "same-operator-name", Tenant: "shared"}.Build(),
 			})
 			Expect(err).ToNot(HaveOccurred())
 			Expect(object.GetSpec().GetAddOnOperators()).To(HaveLen(1))
 			resolved := object.GetSpec().GetAddOnOperators()[0]
 			Expect(resolved.GetId()).To(Equal(shared.GetId()))
 			Expect(resolved.GetName()).To(Equal(shared.GetMetadata().GetName()))
-			Expect(resolved.GetShared()).To(BeTrue())
+			Expect(resolved.GetTenant()).To(Equal("shared"))
 			Expect(resolved.GetProject()).To(Equal(shared.GetMetadata().GetProject()))
 
 			updateResponse, err := server.Update(ctx, privatev1.ClustersUpdateRequest_builder{
@@ -815,7 +815,7 @@ var _ = Describe("Private clusters server", func() {
 						AddOnOperators: []*privatev1.AddOnOperatorReference{
 							privatev1.AddOnOperatorReference_builder{
 								Name:   shared.GetMetadata().GetName(),
-								Shared: true,
+								Tenant: "shared",
 							}.Build(),
 						},
 					}.Build(),
@@ -824,7 +824,7 @@ var _ = Describe("Private clusters server", func() {
 			}.Build())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(updateResponse.GetObject().GetSpec().GetAddOnOperators()).To(HaveLen(1))
-			Expect(updateResponse.GetObject().GetSpec().GetAddOnOperators()[0].GetShared()).To(BeTrue())
+			Expect(updateResponse.GetObject().GetSpec().GetAddOnOperators()[0].GetTenant()).To(Equal("shared"))
 		})
 
 		It("resolves an unscoped shared operator name from a non-default project", func() {

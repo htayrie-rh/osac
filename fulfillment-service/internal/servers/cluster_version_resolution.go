@@ -22,7 +22,6 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
-	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
@@ -92,7 +91,7 @@ func buildClusterVersionReference(cv *privatev1.ClusterVersion) *privatev1.Clust
 	ref := &privatev1.ClusterVersionReference{}
 	ref.SetId(cv.GetId())
 	ref.SetName(cv.GetMetadata().GetName())
-	ref.SetShared(cv.GetMetadata().GetTenant() == auth.SharedTenant)
+	ref.SetTenant(cv.GetMetadata().GetTenant())
 	ref.SetProject(cv.GetMetadata().GetProject())
 	return ref
 }

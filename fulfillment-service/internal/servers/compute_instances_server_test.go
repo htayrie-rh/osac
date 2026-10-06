@@ -651,7 +651,7 @@ var _ = Describe("Compute instances server", func() {
 })
 
 var _ = Describe("Catalog publication and references", func() {
-	DescribeTable("resolves same-name catalog creation sources in the requested tenant", func(shared bool) {
+	DescribeTable("resolves same-name catalog creation sources in the requested tenant", func(tenant string) {
 		Expect(seedComputeCatalogItemTemplate(ctx, auth.SharedTenant, "", "source-template")).To(Succeed())
 		catalogs, err := NewPrivateComputeInstanceCatalogItemsServer().SetLogger(logger).SetAttributionLogic(attribution).SetTenancyLogic(tenancy).Build()
 		Expect(err).ToNot(HaveOccurred())
@@ -666,12 +666,12 @@ var _ = Describe("Catalog publication and references", func() {
 		Expect(err).ToNot(HaveOccurred())
 		request := publicv1.ComputeInstancesCreateRequest_builder{Object: publicv1.ComputeInstance_builder{
 			Metadata: publicv1.Metadata_builder{Name: "vm"}.Build(), Spec: publicv1.ComputeInstanceSpec_builder{
-				CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Name: "same-name", Shared: shared}.Build(),
+				CatalogItem: publicv1.ComputeInstanceCatalogItemReference_builder{Name: "same-name", Tenant: tenant}.Build(),
 			}.Build(),
 		}.Build()}.Build()
 		original := proto.Clone(request)
 		_, err = server.Create(ctx, request)
-		if shared {
+		if tenant == auth.SharedTenant {
 			// Correct shared source reaches ordinary required-field validation.
 			Expect(status.Code(err)).To(Equal(codes.InvalidArgument))
 			Expect(status.Convert(err).Message()).To(ContainSubstring("instance_type"))
@@ -681,7 +681,7 @@ var _ = Describe("Catalog publication and references", func() {
 		}
 		Expect(proto.Equal(request, original)).To(BeTrue())
 	},
-		Entry("selects the published shared item", true),
-		Entry("rejects the unpublished tenant item", false),
+		Entry("selects the published shared item", auth.SharedTenant),
+		Entry("rejects the unpublished tenant item", testTenant),
 	)
 })

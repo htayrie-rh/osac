@@ -204,7 +204,7 @@ var _ = Describe("Catalog Item typed field policies", func() {
 		Expect(clusterVersion.GetId()).To(Equal("version-id"))
 		Expect(clusterVersion.GetName()).To(Equal("current-version"))
 		Expect(clusterVersion.GetProject()).To(Equal("project-b"))
-		Expect(clusterVersion.GetShared()).To(BeTrue())
+		Expect(clusterVersion.GetTenant()).To(Equal("shared"))
 
 		template := canonicalComputeInstanceTemplateReference(
 			privatev1.ComputeInstanceTemplate_builder{Id: "template-id", Metadata: privatev1.Metadata_builder{Name: "current-template", Tenant: auth.SharedTenant, Project: "project-c"}.Build()}.Build(),
@@ -212,7 +212,7 @@ var _ = Describe("Catalog Item typed field policies", func() {
 		Expect(template.GetId()).To(Equal("template-id"))
 		Expect(template.GetName()).To(Equal("current-template"))
 		Expect(template.GetProject()).To(Equal("project-c"))
-		Expect(template.GetShared()).To(BeTrue())
+		Expect(template.GetTenant()).To(Equal("shared"))
 
 		bareMetalTemplate := canonicalBareMetalInstanceTemplateReference(
 			privatev1.BareMetalInstanceTemplate_builder{Id: "baremetal-template-id", Metadata: privatev1.Metadata_builder{Name: "current-template", Tenant: auth.SharedTenant, Project: "project-d"}.Build()}.Build(),
@@ -220,7 +220,7 @@ var _ = Describe("Catalog Item typed field policies", func() {
 		Expect(bareMetalTemplate.GetId()).To(Equal("baremetal-template-id"))
 		Expect(bareMetalTemplate.GetName()).To(Equal("current-template"))
 		Expect(bareMetalTemplate.GetProject()).To(Equal("project-d"))
-		Expect(bareMetalTemplate.GetShared()).To(BeTrue())
+		Expect(bareMetalTemplate.GetTenant()).To(Equal("shared"))
 
 		clusterTemplate := canonicalClusterTemplateReference(
 			privatev1.ClusterTemplate_builder{Id: "cluster-template-id", Metadata: privatev1.Metadata_builder{Name: "current-template", Tenant: auth.SharedTenant, Project: "project-e"}.Build()}.Build(),
@@ -228,13 +228,13 @@ var _ = Describe("Catalog Item typed field policies", func() {
 		Expect(clusterTemplate.GetId()).To(Equal("cluster-template-id"))
 		Expect(clusterTemplate.GetName()).To(Equal("current-template"))
 		Expect(clusterTemplate.GetProject()).To(Equal("project-e"))
-		Expect(clusterTemplate.GetShared()).To(BeTrue())
+		Expect(clusterTemplate.GetTenant()).To(Equal("shared"))
 	})
 })
 
 var _ = Describe("Catalog provenance", func() {
 	It("preserves stored identity without resolving a deleted catalog", func() {
-		stored := privatev1.ComputeInstanceCatalogItemReference_builder{Id: "deleted-catalog", Name: "offering", Shared: true, Project: "project"}.Build()
+		stored := privatev1.ComputeInstanceCatalogItemReference_builder{Id: "deleted-catalog", Name: "offering", Tenant: "shared", Project: "project"}.Build()
 		canonical, err := preserveCatalogItemProvenance(stored, privatev1.ComputeInstanceCatalogItemReference_builder{Id: stored.GetId()}.Build(), &fieldmaskpb.FieldMask{Paths: []string{"spec.catalog_item"}})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(proto.Equal(canonical, stored)).To(BeTrue())
@@ -249,7 +249,7 @@ var _ = Describe("Catalog provenance", func() {
 			_, err := preserveCatalogItemProvenance(stored, ref, &fieldmaskpb.FieldMask{Paths: []string{"spec.catalog_item"}})
 			Expect(err).To(HaveOccurred())
 		}
-		_, err = preserveCatalogItemProvenance(stored, privatev1.ComputeInstanceCatalogItemReference_builder{Id: stored.GetId()}.Build(), &fieldmaskpb.FieldMask{Paths: []string{"spec.catalog_item.shared"}})
+		_, err = preserveCatalogItemProvenance(stored, privatev1.ComputeInstanceCatalogItemReference_builder{Id: stored.GetId()}.Build(), &fieldmaskpb.FieldMask{Paths: []string{"spec.catalog_item.tenant"}})
 		Expect(err).To(HaveOccurred())
 	})
 	It("checks Compute immutable fields when the mask replaces spec", func() {

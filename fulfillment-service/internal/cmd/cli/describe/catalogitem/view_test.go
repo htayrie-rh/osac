@@ -57,7 +57,7 @@ var _ = Describe("Catalog item views", func() {
 		item := publicv1.ComputeInstanceCatalogItem_builder{
 			Id: "item-id", Title: "PostgreSQL | VM", Description: "Database-ready VM\nChoose a larger disk.", Published: true,
 			Metadata: publicv1.Metadata_builder{Name: "postgresql", Tenant: "shared"}.Build(),
-			Template: publicv1.ComputeInstanceTemplateReference_builder{Name: "ocp-virt-vm", Shared: true}.Build(),
+			Template: publicv1.ComputeInstanceTemplateReference_builder{Name: "ocp-virt-vm", Tenant: "shared"}.Build(),
 			Fields: publicv1.ComputeInstanceCatalogItemFields_builder{
 				DiskImage:    publicv1.DiskImageReferenceFieldPolicy_builder{Locked: publicv1.DiskImageReference_builder{Name: "postgresql", Shared: true}.Build()}.Build(),
 				InstanceType: publicv1.InstanceTypeReferenceFieldPolicy_builder{Locked: publicv1.InstanceTypeReference_builder{Id: "type-id", Project: "models"}.Build()}.Build(),
@@ -96,9 +96,9 @@ var _ = Describe("Catalog item views", func() {
 	It("renders cluster policies", func() {
 		item := publicv1.ClusterCatalogItem_builder{
 			Id: "cluster-id", Metadata: publicv1.Metadata_builder{Name: "cluster-item", Tenant: "org", Project: "platform"}.Build(),
-			Template: publicv1.ClusterTemplateReference_builder{Id: "template-id", Shared: true, Project: "infra"}.Build(),
+			Template: publicv1.ClusterTemplateReference_builder{Id: "template-id", Tenant: "shared", Project: "infra"}.Build(),
 			Fields: publicv1.ClusterCatalogItemFields_builder{
-				Version:          publicv1.ClusterVersionReferenceFieldPolicy_builder{Editable: publicv1.EditableClusterVersionReferenceField_builder{DefaultValue: publicv1.ClusterVersionReference_builder{Name: "4-20", Shared: true}.Build()}.Build()}.Build(),
+				Version:          publicv1.ClusterVersionReferenceFieldPolicy_builder{Editable: publicv1.EditableClusterVersionReferenceField_builder{DefaultValue: publicv1.ClusterVersionReference_builder{Name: "4-20", Tenant: "shared"}.Build()}.Build()}.Build(),
 				SshPublicKey:     publicv1.StringFieldPolicy_builder{Editable: publicv1.EditableStringField_builder{}.Build()}.Build(),
 				PullSecretSecret: publicv1.SecretReferenceFieldPolicy_builder{Locked: publicv1.SecretLocalReference_builder{Name: "pull"}.Build()}.Build(),
 				Network: publicv1.ClusterNetworkFieldPolicies_builder{
@@ -153,7 +153,7 @@ var _ = Describe("Catalog item views", func() {
 					publicv1.BareMetalNetworkAttachment_builder{Subnet: publicv1.SubnetLocalReference_builder{Name: "bm-subnet"}.Build(), Interface: new("eno1"), Primary: new(false)}.Build(),
 				}}.Build()}.Build(),
 				AutoExternalIpAttachment: publicv1.BoolFieldPolicy_builder{Editable: publicv1.EditableBoolField_builder{}.Build()}.Build(),
-				InstanceType:             publicv1.BareMetalInstanceTypeReferenceFieldPolicy_builder{Locked: publicv1.BareMetalInstanceTypeReference_builder{Id: "bm-type-id", Shared: true}.Build()}.Build(),
+				InstanceType:             publicv1.BareMetalInstanceTypeReferenceFieldPolicy_builder{Locked: publicv1.BareMetalInstanceTypeReference_builder{Id: "bm-type-id", Tenant: "shared"}.Build()}.Build(),
 				DiskImage:                publicv1.DiskImageReferenceFieldPolicy_builder{Editable: publicv1.EditableDiskImageReferenceField_builder{DefaultValue: publicv1.DiskImageReference_builder{Name: "rhel", Shared: true}.Build()}.Build()}.Build(),
 			}.Build(),
 		}.Build()

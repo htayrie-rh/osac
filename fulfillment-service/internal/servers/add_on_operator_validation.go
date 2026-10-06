@@ -23,6 +23,7 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 )
@@ -55,7 +56,7 @@ type addOnOperatorReferenceCacheKey struct {
 	ownerTenant  string
 	ownerProject string
 	project      string
-	shared       bool
+	tenant       string
 }
 
 type addOnOperatorReferenceResolver struct {
@@ -79,7 +80,7 @@ func (r *addOnOperatorReferenceResolver) resolve(
 	}
 	if fullReference, ok := ref.(fullResourceReference); ok {
 		key.project = fullReference.GetProject()
-		key.shared = fullReference.GetShared()
+		key.tenant = fullReference.GetTenant()
 	}
 	if cached, ok := r.cache[key]; ok {
 		canonicalizeResourceReference(ref, cached)
@@ -163,14 +164,14 @@ func (r *addOnOperatorResourceResolver) resolve(
 // resolver must see this scope selector during lookup rather than after canonicalization.
 func defaultAddOnOperatorReferenceScope(ref resourceReference) {
 	fullReference, ok := ref.(fullResourceReference)
-	if ok && fullReference.GetId() == "" && fullReference.GetProject() == "" && !fullReference.GetShared() {
-		fullReference.SetShared(true)
+	if ok && fullReference.GetId() == "" && fullReference.GetProject() == "" && fullReference.GetTenant() == "" {
+		fullReference.SetTenant(auth.SharedTenant)
 	}
 }
 
 func addOnOperatorOwnerMetadata(ownerMetadata *privatev1.Metadata, ref resourceReference) *privatev1.Metadata {
 	fullReference, ok := ref.(fullResourceReference)
-	if ok && fullReference.GetShared() && fullReference.GetProject() == "" && ownerMetadata.GetProject() != "" {
+	if ok && fullReference.GetTenant() == auth.SharedTenant && fullReference.GetProject() == "" && ownerMetadata.GetProject() != "" {
 		ownerMetadata = cloneMessage(ownerMetadata)
 		ownerMetadata.SetProject("")
 	}

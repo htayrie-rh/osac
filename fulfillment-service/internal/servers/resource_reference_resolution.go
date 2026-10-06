@@ -48,16 +48,18 @@ type resourceReference interface {
 	SetName(string)
 }
 
-// fullResourceReference adds tenant and project selectors to resource identity. The shared
-// selector remains available while reference families are migrated to tenant.
+// fullResourceReference adds tenant and project selectors to resource identity.
 type fullResourceReference interface {
 	resourceReference
-	GetShared() bool
 	GetTenant() string
 	GetProject() string
-	SetShared(bool)
 	SetTenant(string)
 	SetProject(string)
+}
+
+type legacySharedReference interface {
+	GetShared() bool
+	SetShared(bool)
 }
 
 func canonicalizeResourceReference(reference resourceReference, object referenceResource) {
@@ -66,7 +68,9 @@ func canonicalizeResourceReference(reference resourceReference, object reference
 	if fullReference, ok := reference.(fullResourceReference); ok {
 		fullReference.SetProject(object.GetMetadata().GetProject())
 		fullReference.SetTenant(object.GetMetadata().GetTenant())
-		fullReference.SetShared(object.GetMetadata().GetTenant() == auth.SharedTenant)
+		if legacy, ok := reference.(legacySharedReference); ok {
+			legacy.SetShared(object.GetMetadata().GetTenant() == auth.SharedTenant)
+		}
 	}
 }
 
@@ -82,7 +86,7 @@ func validateImmutableReferenceIdentity[T interface {
 		identityChanged ||
 		(candidate.GetName() != "" && candidate.GetName() != current.GetName()) ||
 		(candidate.GetProject() != "" && candidate.GetProject() != current.GetProject()) ||
-		(candidate.GetShared() && !current.GetShared()) {
+		(referenceTenant(candidate) != "" && referenceTenant(candidate) != referenceTenant(current)) {
 		return grpcstatus.Errorf(grpccodes.InvalidArgument,
 			"cannot change %s from '%s' to '%s': %s is immutable",
 			path, refKey(current), refKey(candidate), label)
@@ -381,31 +385,31 @@ func selectedReferenceScope(scope referenceScope, tenant, project string) refere
 // inheritReferenceScope updates ref when a default was copied from the object described by
 // owner. It carries that object's tenant/project into later name lookup. For example, an image
 // default from a shared Template must still select the shared image when used by an acme VM.
-// Explicit selectors are left alone; omitted selectors are filled from the owner. Both fields
-// are maintained so callers using the legacy shared selector retain their canonical behavior.
+// Explicit selectors are left alone; omitted selectors are filled from the owner. Legacy
+// reference families also receive the derived shared selector while they remain in transition.
 func inheritReferenceScope(ref interface {
-	GetShared() bool
-	SetShared(bool)
 	GetTenant() string
 	SetTenant(string)
 	GetProject() string
 	SetProject(string)
 }, owner *privatev1.Metadata) {
-	if ref.GetTenant() != "" || ref.GetShared() {
+	if referenceTenant(ref) != "" {
 		return
 	}
 	ref.SetTenant(owner.GetTenant())
-	ref.SetShared(owner.GetTenant() == auth.SharedTenant)
+	if legacy, ok := ref.(legacySharedReference); ok {
+		legacy.SetShared(owner.GetTenant() == auth.SharedTenant)
+	}
 	if ref.GetProject() == "" {
 		ref.SetProject(owner.GetProject())
 	}
 }
 
-func referenceTenant(reference fullResourceReference) string {
+func referenceTenant(reference interface{ GetTenant() string }) string {
 	if tenant := reference.GetTenant(); tenant != "" {
 		return tenant
 	}
-	if reference.GetShared() {
+	if legacy, ok := reference.(legacySharedReference); ok && legacy.GetShared() {
 		return auth.SharedTenant
 	}
 	return ""
@@ -498,39 +502,33 @@ func resourceLookupError(err error, kind, identifier, source string, notFoundCod
 	return grpcstatus.Errorf(grpccodes.Internal, "failed to retrieve %s '%s'%s", kind, identifier, source)
 }
 
-// canonicalComputeInstanceTemplateReference copies the resolved object's ID, name,
-// tenant, project, and legacy shared selector into a new reference.
+// canonicalComputeInstanceTemplateReference copies the resolved object's identity and scope.
 func canonicalComputeInstanceTemplateReference(resolved *privatev1.ComputeInstanceTemplate) *privatev1.ComputeInstanceTemplateReference {
 	return privatev1.ComputeInstanceTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
 		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
-		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
 }
 
-// canonicalClusterTemplateReference copies the resolved object's ID, name, project,
-// and shared-tenant selector into a new reference.
+// canonicalClusterTemplateReference copies the resolved object's identity and scope.
 func canonicalClusterTemplateReference(resolved *privatev1.ClusterTemplate) *privatev1.ClusterTemplateReference {
 	return privatev1.ClusterTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
 		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
-		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
 }
 
-// canonicalBareMetalInstanceTemplateReference copies the resolved object's ID, name,
-// project, and shared-tenant selector into a new reference.
+// canonicalBareMetalInstanceTemplateReference copies the resolved object's identity and scope.
 func canonicalBareMetalInstanceTemplateReference(resolved *privatev1.BareMetalInstanceTemplate) *privatev1.BareMetalInstanceTemplateReference {
 	return privatev1.BareMetalInstanceTemplateReference_builder{
 		Id:      resolved.GetId(),
 		Name:    resolved.GetMetadata().GetName(),
 		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
-		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
 }
 
@@ -576,7 +574,6 @@ func canonicalBareMetalInstanceTypeReference(resolved *privatev1.BareMetalInstan
 		Name:    resolved.GetMetadata().GetName(),
 		Tenant:  resolved.GetMetadata().GetTenant(),
 		Project: resolved.GetMetadata().GetProject(),
-		Shared:  resolved.GetMetadata().GetTenant() == auth.SharedTenant,
 	}.Build()
 }
 

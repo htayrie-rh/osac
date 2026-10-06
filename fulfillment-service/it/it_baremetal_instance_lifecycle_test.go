@@ -184,7 +184,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 					DiskImage:    publicv1.DiskImageReference_builder{Id: defaultDiskImageId}.Build(),
 				}.Build(),
@@ -256,7 +256,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: "non-existent-catalog-item"}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 				}.Build(),
 			}.Build(),
@@ -276,7 +276,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:        publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType:       publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType:       publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey:       new(bmiTestSSHPublicKey),
 					DiskImage:          publicv1.DiskImageReference_builder{Id: defaultDiskImageId}.Build(),
 					NetworkAttachments: []*publicv1.BareMetalNetworkAttachment{network.bareMetalInstanceAttachment()},
@@ -422,7 +422,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 					NetworkAttachments: []*publicv1.BareMetalNetworkAttachment{
 						publicv1.BareMetalNetworkAttachment_builder{
@@ -468,7 +468,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 					DiskImage:    publicv1.DiskImageReference_builder{Id: diskImageId}.Build(),
 				}.Build(),
@@ -552,7 +552,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 				}.Build(),
 			}.Build(),
@@ -569,7 +569,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:  publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					SshPublicKey: new(bmiTestSSHPublicKey),
 					DiskImage:    publicv1.DiskImageReference_builder{Id: defaultDiskImageId}.Build(),
 				}.Build(),
@@ -633,7 +633,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 				}.Build(),
 				Spec: publicv1.BareMetalInstanceSpec_builder{
 					CatalogItem:    publicv1.BareMetalInstanceCatalogItemReference_builder{Id: catalogItemId}.Build(),
-					InstanceType:   publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+					InstanceType:   publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 					RestartTrigger: 1,
 				}.Build(),
 			}.Build(),
@@ -793,7 +793,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 					Spec: publicv1.BareMetalInstanceSpec_builder{
 						CatalogItem: publicv1.BareMetalInstanceCatalogItemReference_builder{
 							Name:   catName,
-							Shared: true,
+							Tenant: "shared",
 						}.Build(),
 						SshPublicKey: new(bmiTestSSHPublicKey),
 						DiskImage:    publicv1.DiskImageReference_builder{Id: defaultDiskImageId}.Build(),
@@ -824,7 +824,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 			"persisted catalog item reference should contain the resolved ID")
 		Expect(object.GetSpec().GetCatalogItem().GetName()).To(Equal(catName),
 			"persisted catalog item reference should preserve the name")
-		Expect(object.GetSpec().GetCatalogItem().GetShared()).To(BeTrue(),
+		Expect(object.GetSpec().GetCatalogItem().GetTenant()).To(Equal(auth.SharedTenant),
 			"persisted catalog item reference should preserve shared scope")
 		Expect(object.GetSpec().GetTemplate()).ToNot(BeNil(),
 			"spec.template should be materialized when catalog item is referenced by name")
@@ -891,7 +891,7 @@ var _ = Describe("BareMetalInstance lifecycle", func() {
 					}.Build(),
 					Spec: publicv1.BareMetalInstanceSpec_builder{
 						Template:     publicv1.BareMetalInstanceTemplateReference_builder{Id: directTemplateId}.Build(),
-						InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Shared: true}.Build(),
+						InstanceType: publicv1.BareMetalInstanceTypeReference_builder{Id: instanceTypeId, Tenant: "shared"}.Build(),
 						SshPublicKey: new(bmiTestSSHPublicKey),
 						DiskImage:    publicv1.DiskImageReference_builder{Id: diskImageId}.Build(),
 					}.Build(),

@@ -84,7 +84,7 @@ type localReference interface {
 type fullReference interface {
 	localReference
 	GetProject() string
-	GetShared() bool
+	GetTenant() string
 }
 
 func formatRef(ref localReference) string {
@@ -100,8 +100,8 @@ func formatRef(ref localReference) string {
 func formatFullRef(ref fullReference) string {
 	name := formatRef(ref)
 	var scope []string
-	if ref.GetShared() {
-		scope = append(scope, "shared")
+	if ref.GetTenant() != "" {
+		scope = append(scope, ref.GetTenant())
 	}
 	if ref.GetProject() != "" {
 		scope = append(scope, "project: "+ref.GetProject())
