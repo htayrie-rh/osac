@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/osac-project/osac/fulfillment-service/internal/auth"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
 
@@ -87,6 +88,10 @@ type fullReference interface {
 	GetTenant() string
 }
 
+type legacySharedReference interface {
+	GetShared() bool
+}
+
 func formatRef(ref localReference) string {
 	if name := ref.GetName(); name != "" {
 		return name
@@ -100,8 +105,14 @@ func formatRef(ref localReference) string {
 func formatFullRef(ref fullReference) string {
 	name := formatRef(ref)
 	var scope []string
-	if ref.GetTenant() != "" {
-		scope = append(scope, ref.GetTenant())
+	tenant := ref.GetTenant()
+	if tenant == "" {
+		if legacy, ok := ref.(legacySharedReference); ok && legacy.GetShared() {
+			tenant = auth.SharedTenant
+		}
+	}
+	if tenant != "" {
+		scope = append(scope, tenant)
 	}
 	if ref.GetProject() != "" {
 		scope = append(scope, "project: "+ref.GetProject())
