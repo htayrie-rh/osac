@@ -247,7 +247,7 @@ func (s *PrivateClusterCatalogItemsServer) validateAndCanonicalizeTemplate(
 		return err
 	}
 	if err := validateDependencyOwnerScope(catalogItemScope(candidate), resolved.GetMetadata(), "cluster template", " in template"); err != nil {
-		return nil, err
+		return err
 	}
 	if current != nil {
 		currentRef := current.GetTemplate()
