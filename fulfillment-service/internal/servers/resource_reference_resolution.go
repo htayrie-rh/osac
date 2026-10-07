@@ -240,7 +240,14 @@ func resolveFullResourceReferenceWithGet[O referenceResource](
 		object, err := resolveResourceInScopeWithGet(
 			ctx, resourceDao, scope, "", reference.GetName(), kind, source, notFoundCode, get,
 		)
-		return object, err
+		if err != nil {
+			return object, err
+		}
+		if err := validateDependencyOwnerScope(ownerScope, object.GetMetadata(), kind, source); err != nil {
+			var zero O
+			return zero, err
+		}
+		return object, nil
 	}
 
 	identifier := referenceIdentifier(reference.GetId(), reference.GetName())
@@ -266,6 +273,10 @@ func resolveFullResourceReferenceWithGet[O referenceResource](
 		(reference.GetProject() != "" && metadata.GetProject() != scope.project) {
 		var zero O
 		return zero, referenceNotFoundError(notFoundCode, kind, identifier, source)
+	}
+	if err := validateDependencyOwnerScope(ownerScope, metadata, kind, source); err != nil {
+		var zero O
+		return zero, err
 	}
 	return object, nil
 }
