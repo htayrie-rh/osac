@@ -157,7 +157,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 			}.Build()
 			_, err := server.bareMetalInstanceTypesDao.Create().SetObject(instanceType).Do(ctx)
 			Expect(err).ToNot(HaveOccurred())
-			ref := privatev1.BareMetalInstanceTypeReference_builder{Name: "shared-policy-type", Shared: false}.Build()
+			ref := privatev1.BareMetalInstanceTypeReference_builder{Name: "shared-policy-type"}.Build()
 			item := privatev1.ClusterCatalogItem_builder{
 				Metadata: privatev1.Metadata_builder{Tenant: testTenant}.Build(),
 				Fields: privatev1.ClusterCatalogItemFields_builder{
@@ -173,7 +173,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 			Expect(validateClusterCatalogItemNodeSetPolicy(ctx, item, server.bareMetalInstanceTypesDao)).To(Succeed())
 			Expect(ref.GetId()).To(Equal("shared-policy-type"))
 			Expect(ref.GetName()).To(Equal("shared-policy-type"))
-			Expect(ref.GetShared()).To(BeTrue())
+			Expect(ref.GetTenant()).To(Equal(auth.SharedTenant))
 		})
 
 		It("resolves editable default NodeSet references to shared for a tenant-owned catalog item", func() {
@@ -183,7 +183,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 			}.Build()
 			_, err := server.bareMetalInstanceTypesDao.Create().SetObject(instanceType).Do(ctx)
 			Expect(err).ToNot(HaveOccurred())
-			ref := privatev1.BareMetalInstanceTypeReference_builder{Name: "shared-default-policy-type", Shared: false}.Build()
+			ref := privatev1.BareMetalInstanceTypeReference_builder{Name: "shared-default-policy-type"}.Build()
 			item := privatev1.ClusterCatalogItem_builder{
 				Metadata: privatev1.Metadata_builder{Tenant: testTenant}.Build(),
 				Fields: privatev1.ClusterCatalogItemFields_builder{
@@ -198,7 +198,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 			}.Build()
 			Expect(validateClusterCatalogItemNodeSetPolicy(ctx, item, server.bareMetalInstanceTypesDao)).To(Succeed())
 			Expect(ref.GetId()).To(Equal("shared-default-policy-type"))
-			Expect(ref.GetShared()).To(BeTrue())
+			Expect(ref.GetTenant()).To(Equal(auth.SharedTenant))
 		})
 
 		It("rejects tenant-only hardware types in tenant-owned catalog item policies", func() {
@@ -214,7 +214,7 @@ var _ = Describe("Private cluster catalog items server", func() {
 					NodeSets: privatev1.ClusterNodeSetMapPolicy_builder{
 						Locked: privatev1.ClusterNodeSetMap_builder{Items: map[string]*privatev1.ClusterCatalogNodeSet{
 							"workers": privatev1.ClusterCatalogNodeSet_builder{
-								Size: 2, BaremetalInstanceType: privatev1.BareMetalInstanceTypeReference_builder{Name: "tenant-policy-type", Shared: false}.Build(),
+								Size: 2, BaremetalInstanceType: privatev1.BareMetalInstanceTypeReference_builder{Name: "tenant-policy-type"}.Build(),
 							}.Build(),
 						}}.Build(),
 					}.Build(),

@@ -1783,7 +1783,7 @@ var _ = Describe("Clusters server", func() {
 								"workers": publicv1.ClusterNodeSet_builder{
 									Size: proto.Int32(2),
 									BaremetalInstanceType: publicv1.BareMetalInstanceTypeReference_builder{
-										Name: "test-bmit-standard", Shared: false,
+										Name: "test-bmit-standard",
 									}.Build(),
 								}.Build(),
 							},
@@ -1794,7 +1794,7 @@ var _ = Describe("Clusters server", func() {
 				ref := response.GetObject().GetSpec().GetNodeSets()["workers"].GetBaremetalInstanceType()
 				Expect(ref.GetId()).To(Equal("bmit_standard"))
 				Expect(ref.GetName()).To(Equal("test-bmit-standard"))
-				Expect(ref.GetShared()).To(BeTrue())
+				Expect(ref.GetTenant()).To(Equal(auth.SharedTenant))
 			})
 
 			It("rejects tenant-only BMIT IDs for public CaaS NodeSets", func() {
@@ -1808,7 +1808,7 @@ var _ = Describe("Clusters server", func() {
 								"workers": publicv1.ClusterNodeSet_builder{
 									Size: proto.Int32(2),
 									BaremetalInstanceType: publicv1.BareMetalInstanceTypeReference_builder{
-										Id: "tenant-only-public-id", Shared: false,
+										Id: "tenant-only-public-id",
 									}.Build(),
 								}.Build(),
 							},
@@ -2072,7 +2072,7 @@ var _ = Describe("Clusters server", func() {
 						Spec: publicv1.ClusterSpec_builder{
 							Template: publicv1.ClusterTemplateReference_builder{
 								Name:   "test-bmit-template",
-								Shared: true,
+								Tenant: auth.SharedTenant,
 							}.Build(),
 						}.Build(),
 					}.Build(),

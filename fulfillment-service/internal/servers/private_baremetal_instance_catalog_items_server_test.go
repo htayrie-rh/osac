@@ -90,7 +90,7 @@ var _ = Describe("Private bare metal instance catalog items server", func() {
 			_, err := server.Create(ctx, privatev1.BareMetalInstanceCatalogItemsCreateRequest_builder{
 				Object: privatev1.BareMetalInstanceCatalogItem_builder{
 					Metadata: privatev1.Metadata_builder{Name: "system-bmi-offering", Tenant: auth.SystemTenant}.Build(),
-					Template: privatev1.BareMetalInstanceTemplateReference_builder{Id: "my-shared-template-id", Shared: true}.Build(),
+					Template: privatev1.BareMetalInstanceTemplateReference_builder{Id: "my-shared-template-id", Tenant: auth.SharedTenant}.Build(),
 				}.Build(),
 			}.Build())
 			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
@@ -503,7 +503,7 @@ var _ = Describe("Bare Metal Instance Catalog Item policy application", func() {
 		Expect(spec.GetAutoExternalIpAttachment()).To(BeFalse())
 		Expect(spec.GetInstanceType()).NotTo(BeIdenticalTo(instanceType))
 		Expect(spec.GetInstanceType().GetName()).To(Equal(instanceType.GetName()))
-		Expect(spec.GetInstanceType().GetShared()).To(BeTrue())
+		Expect(spec.GetInstanceType().GetTenant()).To(Equal(auth.SharedTenant))
 		Expect(spec.GetDiskImage()).NotTo(BeIdenticalTo(diskImage))
 
 		spec.GetNetworkAttachments()[1].GetSubnet().SetName("changed")
