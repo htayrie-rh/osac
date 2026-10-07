@@ -28,7 +28,6 @@ keycloak:
     # this empty, so the chart falls back to keycloak.keycloak.svc.cluster.local.
     hostname: "keycloak.osac.localhost"
 
-# OpenBao validates the issuer returned by Keycloak discovery. Keep this
-# aligned with keycloak.hostname so the dev-full bootstrap succeeds.
+# OpenBao validates the issuer returned by Keycloak discovery.
 bundledVault:
-  keycloakIssuerUrl: "https://keycloak.osac.localhost:8443/realms/osac"
+  keycloakIssuerUrl: "{{ .Values.keycloak.hostname }}/realms/osac"
