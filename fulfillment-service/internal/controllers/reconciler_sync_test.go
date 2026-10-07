@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/controllers"
@@ -34,14 +35,16 @@ import (
 
 var _ = Describe("Reconciler", func() {
 	var (
-		builder    *controllers.ReconcilerBuilder[*privatev1.Tenant]
-		service    *reconcilerTestServer
-		reconciled chan string
+		builder           *controllers.ReconcilerBuilder[*privatev1.Tenant]
+		service           *reconcilerTestServer
+		reconciled        chan string
+		reconciledObjects chan *privatev1.Tenant
 	)
 
 	BeforeEach(func() {
 		service = &reconcilerTestServer{
-			events: make(chan *privatev1.Event, 10),
+			events:      make(chan *privatev1.Event, 10),
+			notFoundIDs: make(map[string]bool),
 		}
 		server := testing.NewServer()
 		DeferCleanup(server.Stop)
@@ -55,6 +58,7 @@ var _ = Describe("Reconciler", func() {
 		DeferCleanup(connection.Close)
 
 		reconciled = make(chan string, 10)
+		reconciledObjects = make(chan *privatev1.Tenant, 10)
 		builder = controllers.NewReconciler[*privatev1.Tenant]().
 			SetLogger(slog.New(slog.NewTextHandler(GinkgoWriter, nil))).
 			SetName("test").
@@ -63,6 +67,7 @@ var _ = Describe("Reconciler", func() {
 			SetWatchInterval(10 * time.Millisecond).
 			SetFunction(func(ctx context.Context, object *privatev1.Tenant) error {
 				reconciled <- object.GetId()
+				reconciledObjects <- object
 				return nil
 			})
 	})
@@ -107,6 +112,27 @@ var _ = Describe("Reconciler", func() {
 		}.Build()
 		Eventually(reconciled).Should(Receive(Equal("watched-tenant")))
 		Consistently(service.listCalls.Load, 100*time.Millisecond).Should(BeZero())
+	})
+
+	It("preserves deletion semantics when a deleted object cannot be re-read", func() {
+		const id = "deleted-tenant"
+		deletionTimestamp := timestamppb.New(time.Date(2026, time.January, 1, 12, 0, 0, 0, time.UTC))
+		service.notFoundIDs[id] = true
+		builder.SetSync(false)
+		start()
+
+		service.events <- privatev1.Event_builder{
+			Type:      privatev1.EventType_EVENT_TYPE_OBJECT_DELETED,
+			Timestamp: deletionTimestamp,
+			Tenant: privatev1.Tenant_builder{
+				Id:       id,
+				Metadata: privatev1.Metadata_builder{}.Build(),
+			}.Build(),
+		}.Build()
+
+		var object *privatev1.Tenant
+		Eventually(reconciledObjects).Should(Receive(&object))
+		Expect(proto.Equal(object.GetMetadata().GetDeletionTimestamp(), deletionTimestamp)).To(BeTrue())
 	})
 
 	DescribeTable("Reconciles dependencies from events when sync is disabled", func(event *privatev1.Event) {
@@ -182,12 +208,13 @@ var _ = Describe("Reconciler", func() {
 type reconcilerTestServer struct {
 	privatev1.UnimplementedTenantsServer
 	privatev1.UnimplementedEventsServer
-	events     chan *privatev1.Event
-	items      []*privatev1.Tenant
-	listCalls  atomic.Int32
-	watchCalls atomic.Int32
-	getCalls   atomic.Int32
-	get        func(*privatev1.TenantsGetRequest) (*privatev1.TenantsGetResponse, error)
+	events      chan *privatev1.Event
+	items       []*privatev1.Tenant
+	listCalls   atomic.Int32
+	watchCalls  atomic.Int32
+	getCalls    atomic.Int32
+	get         func(*privatev1.TenantsGetRequest) (*privatev1.TenantsGetResponse, error)
+	notFoundIDs map[string]bool
 }
 
 func (s *reconcilerTestServer) List(context.Context, *privatev1.TenantsListRequest) (*privatev1.TenantsListResponse, error) {
@@ -199,6 +226,9 @@ func (s *reconcilerTestServer) Get(_ context.Context, request *privatev1.Tenants
 	s.getCalls.Add(1)
 	if s.get != nil {
 		return s.get(request)
+	}
+	if s.notFoundIDs[request.GetId()] {
+		return nil, status.Error(codes.NotFound, "tenant not found")
 	}
 	return &privatev1.TenantsGetResponse{
 		Object: privatev1.Tenant_builder{Id: request.GetId()}.Build(),
