@@ -29,7 +29,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/database/dao"
 	"github.com/osac-project/osac/fulfillment-service/internal/health"
@@ -531,23 +530,6 @@ func (c *Reconciler[O]) watchEvents(ctx context.Context) error {
 		event := response.Event.ProtoReflect()
 		if event.Has(c.payloadField) {
 			object := event.Get(c.payloadField).Message().Interface().(O)
-			// Deleted events carry the last representation of the object, but the
-			// payload may not have a deletion timestamp because the object is
-			// already gone by the time the reconciler re-reads it. Preserve the
-			// event semantics so a failed re-read still takes the deletion path.
-			if response.Event.GetType() == privatev1.EventType_EVENT_TYPE_OBJECT_DELETED {
-				if metadataObject, ok := any(object).(interface {
-					GetMetadata() *privatev1.Metadata
-				}); ok {
-					if metadata := metadataObject.GetMetadata(); metadata != nil {
-						deletionTimestamp := response.Event.GetTimestamp()
-						if deletionTimestamp == nil {
-							deletionTimestamp = timestamppb.Now()
-						}
-						metadata.SetDeletionTimestamp(deletionTimestamp)
-					}
-				}
-			}
 			c.objectChannel <- object
 		} else {
 			// A related resource changed. Reconcilers subscribe to these events to retry dependent objects, so
