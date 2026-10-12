@@ -277,11 +277,11 @@ that has not been built locally.
 **Endpoints** (via the kind port mappings; every `*.localhost` name resolves to
 127.0.0.1 automatically, so no `/etc/hosts` editing is needed):
 
-- OSAC UI — `http://ui.osac.localhost:8080`
-- AWX UI — `http://awx.awx.localhost:8080` (admin password:
+- OSAC UI — `http://ui.osac.localhost:28080`
+- AWX UI — `http://awx.awx.localhost:28080` (admin password:
   `kubectl -n awx get secret awx-admin-password -o jsonpath='{.data.password}' | base64 -d`)
-- Keycloak — `https://keycloak.osac.localhost:8443`
-- OSAC API — `https://fulfillment-api.osac.localhost:8443` (TLS Passthrough, SNI via Envoy)
+- Keycloak — `https://keycloak.osac.localhost:28443`
+- OSAC API — `https://fulfillment-api.osac.localhost:28443` (TLS Passthrough, SNI via Envoy)
 
 **Log in** to the UI as `tenant1_user` (or `tenant1_admin`). The password is the
 Keycloak dev-fixtures `default-user-password`:

@@ -10,7 +10,7 @@ data:
   LOG_LEVEL: "info"
   # In-cluster upstream for the UI's backend proxy (the browser only ever talks to
   # this pod on :8080, never directly to the fulfillment API). The fulfillment-api
-  # Service listens on :8000 — :8443 is the host-side kind nodeport for browser
+  # Service listens on :8000 — :28443 is the host-side Kind port for browser
   # traffic and is NOT a valid in-cluster port, so the backend must use :8000.
   # The .localhost host is kept so the TLS SNI matches what the ingress-proxy
   # expects (CoreDNS rewrites *.osac.localhost → the in-cluster Service); TLS
@@ -19,7 +19,7 @@ data:
   FULFILLMENT_TLS_INSECURE: "1"
   OIDC_TLS_INSECURE: "1"
   OIDC_CLIENT_ID: "osac-ui"
-  OIDC_ISSUER_URL: "https://keycloak.osac.localhost:8443/realms/osac"
+  OIDC_ISSUER_URL: "https://keycloak.osac.localhost:28443/realms/osac"
   OIDC_SERVICE_CLIENT_ID: "osac-ui-backend"
 ---
 apiVersion: apps/v1
@@ -100,7 +100,7 @@ spec:
     port: 80
     targetPort: http
 ---
-# HTTPRoute for OSAC UI — accessible at http://ui.osac.localhost:8080
+# HTTPRoute for OSAC UI — accessible at http://ui.osac.localhost:28080
 # The HTTP listener on the shared Gateway is created by the osac-infra chart.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute

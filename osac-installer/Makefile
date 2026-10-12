@@ -152,6 +152,7 @@ KIND_CONFIG := kind-config.yaml
 # distinct kubeconfig so it never collides with the rootless PROFILE=dev cluster
 # of the same name (both would otherwise share this one file and clobber it).
 ifeq ($(PROFILE),dev-full)
+KIND_CONFIG := kind-config-devfull.yaml
 KIND_KUBECONFIG := $(HOME)/.kube/$(KIND_CLUSTER_NAME)-kind-root.kubeconfig
 else
 KIND_KUBECONFIG := $(HOME)/.kube/$(KIND_CLUSTER_NAME)-kind.kubeconfig

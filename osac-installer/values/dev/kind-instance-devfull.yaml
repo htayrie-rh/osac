@@ -40,7 +40,7 @@ csiBackends: {}
 # the fulfillment API and the OIDC issuer must be reachable *from the host* without
 # any /etc/hosts editing. Any `*.localhost` name resolves to 127.0.0.1 host-side,
 # and CoreDNS rewrites `*.localhost` back to the in-cluster service names, so these
-# names resolve correctly BOTH from the browser (→ gateway on :8443) and in-cluster
+# names resolve correctly BOTH from the browser (→ gateway on :28443) and in-cluster
 # (→ the real service). The plain `dev`/IT profile keeps the *.svc.cluster.local
 # names (kind-instance.yaml) because its test client uses /etc/hosts.
 #
@@ -50,8 +50,8 @@ csiBackends: {}
 service:
   externalHostname: fulfillment-api.osac.localhost
   auth:
-    issuerUrl: https://keycloak.osac.localhost:8443/realms/osac
+    issuerUrl: https://keycloak.osac.localhost:28443/realms/osac
   idp:
-    url: https://keycloak.osac.localhost:8443
+    url: https://keycloak.osac.localhost:28443
   vault:
-    keycloakIssuerUrl: "https://keycloak.osac.localhost:8443/realms/osac"
+    keycloakIssuerUrl: "https://keycloak.osac.localhost:28443/realms/osac"

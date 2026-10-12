@@ -11,8 +11,8 @@ Components deployed:
 🌐 WEB UI ACCESS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-OSAC UI:     http://ui.osac.localhost:8080
-AWX Web UI:  http://awx.awx.localhost:8080
+OSAC UI:     http://ui.osac.localhost:28080
+AWX Web UI:  http://awx.awx.localhost:28080
 
 Login credentials:
   Username: {{ .Values.tenant.users | replace "," " or " }}
@@ -21,7 +21,7 @@ Login credentials:
       -o jsonpath='{.data.default-user-password}' | base64 -d && echo
 
 Next steps:
-  1. Open http://ui.osac.localhost:8080
+  1. Open http://ui.osac.localhost:28080
   2. Click "Sign in" → authenticate via Keycloak
   3. Browse the catalog and create a virtual machine
 
@@ -42,7 +42,7 @@ Next steps:
      --flow credentials \
      --client-id osac-admin \
      --client-secret "${OSAC_ADMIN_SECRET}" \
-     https://fulfillment-api.osac.localhost:8443
+     https://fulfillment-api.osac.localhost:28443
 
 4. Verify access:
    osac get projects
