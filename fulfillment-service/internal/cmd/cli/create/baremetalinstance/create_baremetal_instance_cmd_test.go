@@ -231,6 +231,17 @@ var _ = Describe("Create baremetalinstance flag registration", func() {
 		Expect(cmd.ParseFlags([]string{"--disk-image", "rhel-9"})).To(Succeed())
 	})
 
+	It("should register --instance-type flag", func() {
+		cmd := Cmd()
+		cmd.SetOut(GinkgoWriter)
+		cmd.SetErr(GinkgoWriter)
+
+		flag := cmd.Flags().Lookup("instance-type")
+		Expect(flag).NotTo(BeNil())
+		Expect(flag.Usage).To(ContainSubstring("InstanceType"))
+		Expect(cmd.ParseFlags([]string{"--instance-type", "standard-bm"})).To(Succeed())
+	})
+
 	It("should not register legacy image flags", func() {
 		cmd := Cmd()
 		Expect(cmd.Flags().Lookup("image")).To(BeNil())
@@ -303,6 +314,23 @@ var _ = Describe("buildSpec", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(spec.GetInstanceType().GetName()).To(Equal("bare-metal.large"))
 		Expect(spec.GetInstanceType().GetShared()).To(BeTrue())
+	})
+
+	It("should set instance_type from the instance-type flag", func() {
+		c := &runnerContext{}
+		c.args.instanceType = "standard-bm"
+
+		spec, err := c.buildSpec("catalog-item-id", false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(spec.GetInstanceType().GetName()).To(Equal("standard-bm"))
+	})
+
+	It("should leave instance_type unset when the instance-type flag is empty", func() {
+		c := &runnerContext{}
+
+		spec, err := c.buildSpec("catalog-item-id", false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(spec.HasInstanceType()).To(BeFalse())
 	})
 })
 

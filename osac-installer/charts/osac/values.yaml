@@ -21,8 +21,8 @@ global:
     endpoint: ""
   fulfillmentTrust:
     # Enables trust reconciliation for tenant-scoped ClusterOrders.
-    # Development and CI profiles can override this until tenant trust support is installed.
-    enabled: true
+    # Enable only when tenant CSI trust support is deployed.
+    enabled: false
     tenantNamespace: osac-csi
   # --- Service Enablement ---
   # Controls which service tiers are active across all OSAC components.
@@ -51,6 +51,7 @@ global:
     k8sManager: k8s_only
     netris:
       controllerUrl: ""
+      validateCerts: true
       credentials:
         username: ""
       siteId: ""
@@ -155,6 +156,21 @@ service:
   externalHostname: ""
   # [REQUIRED] Hostname for the internal API Route (e.g. fulfillment-internal-api-osac.apps.mycluster.example.com)
   internalHostname: ""
+  mcp:
+    enabled: false
+    externalHostname: ""
+    # OpenShift Routes use HTTPS port 443; custom external ports are supported on Kind.
+    externalPort: 443
+    # The OAuth resource URL is the MCP HTTPS root URL ending in /.
+    exchangeClientId: ""
+    exchangeCredentialsSecret: ""
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
   images:
     service:
       repository: ghcr.io/osac-project/fulfillment-service
@@ -285,6 +301,7 @@ aap:
         # Netris connection fields below must also be set on networkFulfillment
         # (including NETRIS_PASSWORD); there is no shared Netris config block.
         NETRIS_CONTROLLER_URL: ""
+        NETRIS_VALIDATE_CERTS: "true"
         NETRIS_USERNAME: ""
         NETRIS_SITE_ID: ""
         NETRIS_TENANT_ID: ""
@@ -315,6 +332,7 @@ aap:
       config:
         # Duplicate of clusterFulfillment Netris connection fields — set both.
         NETRIS_CONTROLLER_URL: ""
+        NETRIS_VALIDATE_CERTS: "true"
         NETRIS_USERNAME: ""
         NETRIS_SITE_ID: ""
         NETRIS_TENANT_ID: ""

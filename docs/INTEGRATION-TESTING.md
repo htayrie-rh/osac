@@ -151,6 +151,7 @@ Touched-area requirements: [component guide](../fulfillment-service/AGENTS.md#in
 
 - **CLI commands that only call Fulfillment APIs:** Cover them in `fulfillment-service/it/`.
 - **VMaaS ComputeInstance network-attachment Create contract ([OSAC-5562](https://redhat.atlassian.net/browse/OSAC-5562), [OSAC-5563](https://redhat.atlassian.net/browse/OSAC-5563), DEV):** `fulfillment-service/it/it_compute_subnet_test.go` exercises the public API's one-attachment limit, no-persistence errors for missing tenant defaults and missing SecurityGroups on a non-default VirtualNetwork, and persistence of an explicitly specified attachment. `internal/servers/private_compute_instances_server_test.go` covers successful field-by-field tenant-default completion. This is Fulfillment Service and database coverage; provider provisioning remains E2E coverage.
+- **MCP server:** `fulfillment-service/it/it_mcp_server_test.go` uses a real MCP SDK HTTP client and an in-process MCP handler. Its test exchanger supplies the caller's existing API token to the deployed public Fulfillment API and PostgreSQL, and asserts four-tool discovery, tenant visibility, creator attribution, and rejected writes without persisted mutations. `it_mcp_deployed_test.go` runs in the Fulfillment Kind CI job with MCP enabled (`MCP_TEST_ENABLED=true make -C osac-installer test PLATFORM=kind PROFILE=dev NS=osac SUITE=fulfillment`); it checks the deployed TLS route and OAuth metadata, obtains a user token through Keycloak authorization code plus PKCE, lists tools and ComputeInstances through the MCP SDK, and rejects a token scoped to the Fulfillment API. The separate `mcpserver` unit suite covers exchange edge cases. Helm lint and rendering cover the opt-in templates and schema; ordinary profile renders exercise the disabled default. Provider provisioning, VM readiness, and interoperability with external MCP hosts remain outside these tests.
 - **Canonical networking Hub routing:** [`fulfillment-service/it/it_networking_hub_placement_test.go`](../fulfillment-service/it/it_networking_hub_placement_test.go) covers VirtualNetwork, Subnet, SecurityGroup, ExternalIPPool, ExternalIP, ExternalIPAttachment, and NATGateway CR placement on the NetworkClass canonical Hub and absence on a valid alternate Hub. It also verifies that SecurityGroup retains its stored Hub assignment and does not create a duplicate CR when the canonical Hub changes. The fixture uses distinct Hub entries and namespaces on the service Kind cluster; it tests Hub entry and namespace routing, not isolation across separate Kubernetes clusters. The unavailable-canonical/no-fallback case remains controller unit coverage because this deployed-service harness cannot isolate or reset the reconcilers' cached Hub resolution between cases.
 - **NetworkClass manager registration and capability propagation:** `it_networkclass_manager_capabilities_test.go` creates the NetworkClass first, then adds fabric and Kubernetes manager registrations and verifies the deployed operator persists their capability intersection. The installer target runs this spec separately with the local operator image so the rest of the service-only suite remains isolated from operator reconciliation.
 - **NetworkClass manager readiness:** `it_networkclass_manager_readiness_test.go` covers `PENDING → FAILED` while a manager is missing, recovery to `READY` after its ConfigMap registration appears, and the persisted capability intersection.
@@ -370,11 +371,14 @@ Touched-area requirements: [component guide](../osac-aap/AGENTS.md#integration-t
 | Tier | Location / command | Exercises for real | Faked or omitted |
 |---|---|---|---|
 | Unit | `tests/unit/`; `uv run pytest tests/unit` | Filter and isolated plugin behavior | Kubernetes, AAP, cloud, and storage services are mocked or fixture-driven. |
+| Unit | `tests/unit/plugins/lookup/test_fulfillment_token.py`; included by `uv run pytest tests/unit` | OIDC discovery validation, Keycloak client-credentials exchange, token caching/refresh, and sanitized failures | Keycloak and Fulfillment are mocked; this does not prove deployed credentials or cross-cluster reachability. |
+| Unit | `tests/unit/test_publish_templates_auth_config.py`; included by `uv run pytest tests/unit` | Parsed publisher pod spec, Kubernetes service-account projection, and OAuth Secret/ConfigMap references | No Kubernetes objects are created and no AAP API or external issuer is contacted. |
 | Unit / isolated role transform ([DEV]) | `uv run --group development ansible-playbook collections/ansible_collections/osac/service/roles/hosted_cluster/tests/test.yml` | Executable NodePool definition transforms: distinct NodeSet names and selectors for the same hardware profile, independent replica counts and scale-up | No Kubernetes resources are created. This is not component-integration or deployed AAP/provider coverage; those gaps remain owned by [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843). |
 | Component integration | `tests/integration/`; `make test` (creates Kind, runs playbooks, and tears it down) | Ansible roles/playbooks against real Kind APIs, including a second isolated API for storage target routing, plus CRDs, leases, finalizers, and test-runner pod | AAP, OpenStack, KubeVirt/RHACM, and other provider APIs are not generally real; the VMS storage target uses a mock server. |
-| Unit | `tests/unit/test_agentless_network_state.py`, `tests/unit/test_agentless_net_network.py`, `tests/unit/test_agentless_net_subnet.py`; included by `uv run pytest tests/unit` | UID/CIDR allocation, additive SQLite migration, parent-locked Subnet reservations, VLAN interface/DHCP reconciliation, lease validation, and module diagnostics | `ip`, systemd/Supervisor, dnsmasq, namespaces, switches, and AAP are mocked; this does not prove provider execution. |
+| Unit ([DEV] OSAC-6306) | `tests/unit/test_agentless_network_state.py`; included by `uv run pytest tests/unit` | Current SQLite schema-v1 initialization and validation, UID-owned pool registration/deletion, identity preservation, and rejection of incompatible schemas without migration | SQLite is real and isolated in temporary files. `ip`, systemd/Supervisor, dnsmasq, namespaces, switches, and AAP are not used by pool-state operations. |
 | Contract | `tests/integration/targets/agentless_net_stub/tasks/baseline.yml`; from `tests/integration/` run `ansible-playbook targets/agentless_net_stub/tasks/baseline.yml -e '@common_vars.yml'` | Fresh Ansible processes run `files/validate_vn_inventory.yml`: real environment lookup, YAML parsing, Cumulus/trunk validation, password rejection, and node/switch registration | AAP, SSH, and Linux/switch provider operations are omitted. |
 | Component integration | `tests/integration/targets/agentless_net_subnet/tasks/baseline.yml`; from `tests/integration/` run `ansible-playbook targets/agentless_net_subnet/tasks/baseline.yml -e '@common_vars.yml'` | Real Kind namespace and VirtualNetwork CR, status-subresource update, and validation of the operator-supplied parent Fulfillment UUID, Kubernetes UID, Ready phase, and tenant | Operator reconciliation, AAP, managed-node SSH, Cumulus switches, Linux VLAN interfaces, and DHCP are omitted. |
+| Component integration ([DEV] OSAC-6306) | `tests/integration/targets/agentless_net_external_ip_pool/tasks/baseline.yml`; after `./setup_test_env.sh`, from `tests/integration/` run `KUBECONFIG="$PWD/kubeconfig-osac-test" K8S_AUTH_KUBECONFIG="$PWD/kubeconfig-osac-test" uv run ansible-playbook targets/agentless_net_external_ip_pool/tasks/baseline.yml -e '@common_vars.yml'` | Real Kind namespace and ExternalIPPool CRs; existing top-level pool playbooks and dispatcher; local Ansible execution of the state module; temporary SQLite identity, retry, identity-checked deletion, and deletion idempotence | No operator reconciliation, deployed AAP, SSH, switches, or network/provider commands. `setup_test_env.sh` creates the dedicated Kind cluster and installs the repository CRDs. |
 | Component integration (focused) | A target under `tests/integration/targets/`; run the corresponding playbook from `tests/integration/` | The specific role workflow and its documented fixtures | Only the dependencies declared by that target; inspect its setup and overrides before claiming a real boundary. |
 | Contract | No dedicated contract suite; use the qualifying [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843) task for AAP/provider coverage | No AAP or provider endpoint is exercised as a contract | The Kind API, mock VMS server, and fixture-driven provider behavior do not prove an AAP or provider contract. |
 | E2E | Cross-component OSAC E2E suites | Complete fulfillment and provisioning flows | Depends on the deployed AAP and provider environment. |
@@ -388,9 +392,10 @@ applicable integration tests separately to validate workflow behavior.
 ### Coverage notes
 
 - **Filters, variable transforms, and isolated plugin logic:** Include invalid input and default handling.
-- **AgentlessNet VirtualNetwork/Subnet state and command helpers:** Unit coverage proves additive migration, internal allocation and exhaustion, exclusion parsing for bridge memberships and NVUE reserved ranges, parent-lock serialization, retry retention, VLAN interfaces, derived DHCP-manager selection, DHCP rendering/service lifecycle, lease preservation, and diagnostics with mocked provider commands. The operator envtest verifies parent-context construction; the Kind target validates the supplied parent UUID-to-UID, Ready, and tenant fields. AAP/Kind service-readiness checks do not prove client leases or traffic delivery.
+- **AgentlessNet VirtualNetwork/Subnet state and command helpers:** Unit coverage proves the current v1 schema initialization, fail-closed rejection of incompatible v1/v2 databases, internal allocation and exhaustion, exclusion parsing for bridge memberships and NVUE reserved ranges, parent-lock serialization, retry retention, VLAN interfaces, derived DHCP-manager selection, DHCP rendering/service lifecycle, lease preservation, and diagnostics with mocked provider commands. OSAC-6306 pool unit cases prove immutable identity and idempotent identity-checked deletion. The existing ExternalIPPool operator controller test verifies pool deprovision waits until child ExternalIP CRs are removed. The operator envtest verifies Subnet parent-context construction; the Kind pool target verifies the ExternalIPPool CR's Kubernetes UID, Fulfillment label, tenant, family, and CIDR reach saved state through the existing playbooks. AAP/Kind service-readiness checks do not prove client leases or traffic delivery.
 - **Ansible roles, workflow tasks, hooks, leases, finalizers, or Kubernetes resources:** The test must exercise the role/playbook through Ansible against Kind.
 - **Template publishing TLS:** The `test_cert_validation` play in `collections/ansible_collections/osac/service/roles/publish_templates/tests/test.yml` runs the real role against an untrusted local HTTPS endpoint and asserts certificate rejection before any authenticated HTTP request. The endpoint is a test double; it does not prove a deployed AAP or fulfillment boundary.
+- **Template publishing OAuth:** Unit and local mock-server coverage belong to DEV [OSAC-6084](https://redhat.atlassian.net/browse/OSAC-6084). The token lookup tests validate OIDC discovery, client-credentials exchange, refresh, and sanitized errors; the role fixture verifies Bearer authentication for each published resource type. Neither test proves deployed AAP secret delivery or cross-cluster Keycloak/Fulfillment reachability; QE coverage remains tracked by [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843).
 - **Execution-environment definition or dependency inputs:** Image success does not prove the workflow boundary.
 - **AAP, OpenStack, KubeVirt/RHACM, or provider provisioning:** Kind-only tests with mocks cannot claim provider coverage.
 - **Storage-provider behavior:** The mock VMS server validates role logic, not the provider API.
@@ -415,6 +420,11 @@ The integration harness still has provider-dependent scenarios that cannot run
 without AAP or additional infrastructure. Changes to provisioning behavior
 must identify the real or contract boundary explicitly and link any missing
 coverage to [OSAC-4850](https://redhat.atlassian.net/browse/OSAC-4850) or the relevant [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843) follow-up.
+
+Template publishing OAuth has unit and local mock-server coverage, but no
+deployed test currently proves AAP worker secret delivery or connectivity across
+the Keycloak, AAP, and Fulfillment boundaries. Track that deployed journey under
+[OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843).
 
 ## osac-csi-driver
 
@@ -492,6 +502,26 @@ Touched-area requirements: [component guide](../tests/e2e/AGENTS.md#touched-area
 Resize lifecycle tests expect `RestartRequired`. Multi-node live hot-plug
 coverage is tracked under
 [OSAC-5335](https://redhat.atlassian.net/browse/OSAC-5335).
+
+### CaaS CI selection boundary
+
+The full-install callers in osac and osac-test-infra select `caas/sanity` with
+`-m sanity` for PRs and merge queue. Test-infra dispatches carrying `pr-number`
+use the same policy regardless of tier labels or suite/marker overrides.
+Periodics select all of `caas` (sanity + regression) plus reference tests marked
+`requires_caas` or `reference_common`. Manual dispatches without PR context
+default to sanity and retain suite/filter/marker overrides. The reusable runner
+never adds references to sanity; an empty requested tier fails rather than
+falling back to the whole suite. Nightly/release validation already selects
+`caas` explicitly and remains unchanged.
+
+[DEV] Unit/Contract selection checks live in
+`tests/unit/test_caas_ci_suite_policy.py`. From the repository root, run
+`OSAC_TEST_INFRA_DIR=/path/to/osac-test-infra uv run pytest -n 0 tests/unit/test_caas_ci_suite_policy.py`.
+They evaluate actual caller YAML and execute path-selection Bash against
+local temporary directories. Companion-repository checks skip when the path
+is not set. These checks and pytest collection prove selection only, not
+[QE] deployed CaaS success; the live prerequisites below still apply.
 
 ### Focused CaaS natural-teardown boundary
 
