@@ -71,6 +71,7 @@ def _run_role_with_inputs(tmp_path: Path, input_overrides: dict) -> subprocess.C
         "template_parameters": {},
         "l2_vni": "10007",
         "l3_vni": "20007",
+        "fabric_reserved_range": "192.0.2.1-192.0.2.20",
     }
     inputs.update(input_overrides)
     playbook = [
@@ -129,6 +130,7 @@ def test_role_arguments_match_the_subnet_dispatch_contract() -> None:
     assert argspec["template_parameters"]["required"] is False
     assert argspec["l2_vni"]["required"] is True
     assert argspec["l3_vni"]["required"] is True
+    assert argspec["fabric_reserved_range"]["required"] is True
 
 
 def test_required_fabric_outputs_are_checked_before_kubernetes_writes() -> None:
@@ -145,11 +147,14 @@ def test_required_fabric_outputs_are_checked_before_kubernetes_writes() -> None:
     assert len(validation["that"]) >= 3
     assert any("l2_vni" in condition for condition in validation["that"])
     assert any("l3_vni" in condition for condition in validation["that"])
+    assert any("fabric_reserved_range" in condition for condition in validation["that"])
 
 
 @pytest.mark.parametrize(
     "input_overrides",
     [
+        {"fabric_reserved_range": ""},
+        {"fabric_reserved_range": "  "},
         {"l2_vni": "0"},
         {"l2_vni": "not-a-vni"},
         {"l3_vni": "16777216"},
@@ -161,6 +166,15 @@ def test_invalid_fabric_inputs_fail_before_namespace_write(tmp_path: Path, input
 
     assert result.returncode != 0
     assert "No Kubernetes resources were changed" in output
+    assert "Create tenant workload namespace" not in output
+
+
+def test_missing_fabric_range_fails_argument_validation_before_namespace_write(tmp_path: Path) -> None:
+    result = _run_role_with_inputs(tmp_path, {"fabric_reserved_range": None})
+    output = result.stdout + result.stderr
+
+    assert result.returncode != 0
+    assert "fabric_reserved_range" in output
     assert "Create tenant workload namespace" not in output
 
 

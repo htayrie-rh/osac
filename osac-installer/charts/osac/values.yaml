@@ -116,14 +116,17 @@ operator:
     workersJoiningByInstanceType: {}
   fulfillment:
     serverAddress: "fulfillment-internal-api:8001"
-    tokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+    credentials:
+      secretName: fulfillment-controller-credentials
+      clientIdKey: client-id
+      clientSecretKey: client-secret
     tls:
       caBundle:
         configMap: ca-bundle
         key: bundle.pem
     configMap:
       name: "osac-fulfillment-config"
-      optional: true
+      optional: false
   controllers:
     tenant: true
     networking: true
@@ -479,7 +482,10 @@ hubAccess:
 clusterVersions:
   enabled: false
   versions: []
-  # Example:
+  # Default versions require a diskImage; non-default versions may omit it.
+  # DiskImages are shared Linux registry images, created before the version.
+  # Existing named records are retained without updates.
+  # Example (development/CI image; use your own artifact in production):
   # enabled: true
   # versions:
   # - version: "4.20.0"
@@ -487,6 +493,10 @@ clusterVersions:
   # - version: "4.22.0"
   #   image: "quay.io/openshift-release-dev/ocp-release:4.22.0-multi"
   #   default: true
+  #   diskImage:
+  #     name: rhcos-4-22
+  #     sourceRef: oci://quay.io/osac-project/rhcos:4.22.0
+  #     architecture: [ARCHITECTURE_AMD64]
 
 lvms:
   # Register LVMS as a local StorageBackend + StorageTier in the fulfillment service

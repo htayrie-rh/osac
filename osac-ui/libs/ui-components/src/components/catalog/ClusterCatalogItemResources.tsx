@@ -19,9 +19,9 @@ import {
   clusterNodeSetItemsFromPolicy,
   clusterNodeSetMapPolicy,
   clusterVersionReference,
-  findBareMetalInstanceTypeForReference,
   findClusterVersionForReference,
-  formatClusterCatalogBareMetalInstanceTypeRow,
+  findHostTypeForReference,
+  formatClusterCatalogHostTypeRow,
   formatClusterCatalogNodeSetRow,
   formatClusterCatalogVersionRow,
   primaryClusterCatalogNodeSet,
@@ -46,30 +46,22 @@ const ClusterCatalogItemResources = ({
   const versionPolicyBehavior = catalogFieldPolicyBehavior(fields?.version);
   const nodeSetsPolicyBehavior = catalogFieldPolicyBehavior(nodeSetsPolicy);
 
-  const { clusterVersions, bareMetalInstanceTypes } = resourceLookups;
+  const { clusterVersions, hostTypes } = resourceLookups;
 
   const clusterVersion = useMemo(
     () => findClusterVersionForReference(clusterVersions, versionReference),
     [clusterVersions, versionReference],
   );
 
-  const instanceType = useMemo(
-    () =>
-      findBareMetalInstanceTypeForReference(
-        bareMetalInstanceTypes,
-        primaryNodeSet?.nodeSet.baremetalInstanceType,
-      ),
-    [bareMetalInstanceTypes, primaryNodeSet?.nodeSet.baremetalInstanceType],
+  const hostType = useMemo(
+    () => findHostTypeForReference(hostTypes, primaryNodeSet?.nodeSet.hostType),
+    [hostTypes, primaryNodeSet?.nodeSet.hostType],
   );
 
   const versionLabel = formatClusterCatalogVersionRow(fields, clusterVersion, versionReference);
   const showClusterVersionIcon = Boolean(versionReference || clusterVersion);
   const nodeSetLabel = formatClusterCatalogNodeSetRow(nodeSetsPolicy, primaryNodeSet);
-  const instanceTypeLabel = formatClusterCatalogBareMetalInstanceTypeRow(
-    nodeSetsPolicy,
-    primaryNodeSet,
-    instanceType,
-  );
+  const hostTypeLabel = formatClusterCatalogHostTypeRow(nodeSetsPolicy, primaryNodeSet, hostType);
 
   return (
     <DescriptionList isHorizontal isCompact>
@@ -105,10 +97,10 @@ const ClusterCatalogItemResources = ({
         </DescriptionListDescription>
       </DescriptionListGroup>
       <DescriptionListGroup>
-        <DescriptionListTerm>{t('Bare-metal instance type')}</DescriptionListTerm>
+        <DescriptionListTerm>{t('Host type')}</DescriptionListTerm>
         <DescriptionListDescription>
           <Flex flexWrap={{ default: 'nowrap' }} gap={{ default: 'gapXs' }}>
-            <FlexItem>{instanceTypeLabel || '-'}</FlexItem>
+            <FlexItem>{hostTypeLabel || '-'}</FlexItem>
             <FlexItem>
               <CatalogFieldEditabilityLabel behavior={nodeSetsPolicyBehavior} />
             </FlexItem>

@@ -2,7 +2,6 @@ import type { MessageInitShape } from '@bufbuild/protobuf';
 import { Code, ConnectError, type Transport, createRouterTransport } from '@connectrpc/connect';
 
 import {
-  BareMetalInstanceType,
   Cluster,
   ClusterCatalogItem,
   ClusterTemplate,
@@ -29,6 +28,7 @@ import {
   ExternalIPsCreateRequest,
   ExternalIPsCreateResponse,
   ExternalIPsListRequest,
+  HostType,
   IdentityProvider,
   IdentityProvidersCreateRequest,
   IdentityProvidersCreateResponse,
@@ -80,6 +80,7 @@ import {
   ExternalIPAttachments,
   ExternalIPState,
   ExternalIPs,
+  HostTypes,
   IdentityProviders,
   InstanceTypeState,
   InstanceTypes,
@@ -173,7 +174,7 @@ export type MockApiFixtures = {
   clusterCatalogItems?: ClusterCatalogItem[];
   clusterTemplates?: ClusterTemplate[];
   clusterVersions?: ClusterVersion[];
-  bareMetalInstanceTypes?: BareMetalInstanceType[];
+  hostTypes?: HostType[];
   tenants?: PrivateTenant[];
   virtualNetworks?: VirtualNetwork[];
   subnets?: Subnet[];
@@ -485,7 +486,7 @@ export const createMockConnectTransport = (
   const clusterCatalogItems = fixtures.clusterCatalogItems ?? [];
   const clusterTemplates = fixtures.clusterTemplates ?? [];
   const clusterVersions = fixtures.clusterVersions ?? [];
-  const bareMetalInstanceTypes = fixtures.bareMetalInstanceTypes ?? [];
+  const hostTypes = fixtures.hostTypes ?? [];
   const tenants = fixtures.tenants ?? [];
   const identityProviders = fixtures.identityProviders ?? [];
   const projects = fixtures.projects ?? [];
@@ -564,6 +565,23 @@ export const createMockConnectTransport = (
         get: (req) => ({
           object: clusterVersions.find((i) => i.id === req.id),
         }),
+      });
+
+      router.service(HostTypes, {
+        list: () => ({
+          items: hostTypes,
+          size: hostTypes.length,
+          total: hostTypes.length,
+        }),
+        get: (req) => {
+          const hostType = hostTypes.find((i) => i.id === req.id);
+          if (!hostType) {
+            throw new ConnectError(`Host type not found in test: ${req.id}`, Code.NotFound);
+          }
+          return {
+            object: hostType,
+          };
+        },
       });
 
       router.service(VirtualNetworks, {
@@ -878,12 +896,8 @@ export const createMockConnectTransport = (
       });
 
       router.service(PublicBareMetalInstanceTypes, {
-        list: () => ({
-          items: bareMetalInstanceTypes,
-          size: bareMetalInstanceTypes.length,
-          total: bareMetalInstanceTypes.length,
-        }),
-        get: (req) => ({ object: bareMetalInstanceTypes.find((item) => item.id === req.id) }),
+        list: () => ({ items: [], size: 0, total: 0 }),
+        get: () => ({}),
       });
 
       router.service(PrivateBareMetalInstanceTypes, {

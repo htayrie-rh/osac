@@ -22,6 +22,7 @@ effects, and follow the instructions for every affected component.
 |---|---|---|---|
 | AgentlessNet Subnet VLAN, real DHCP clients, retry, and cleanup | Deployed lab E2E for saved allocations, leases, gateway/L2 traffic, service restart, `/30`, and peer-preserving lifecycle | Root orchestrator `vlan-e2e.sh`; reusable client and VLAN assertions live in that script | Requires the running SNO and Containerlab Cumulus VX lab, deployed Fulfillment/operator/AAP, source-pinned EE/project, and container access. Client macvlan children use host links `leaf1-swp2`, `leaf2-swp2`, and `leaf2-swp3`; the runner snapshots and restores the switch ports. Does not establish physical-hardware, BMaaS lease-status, NAT, or full-install CI coverage. |
 | VMaaS ComputeInstance InstanceType resize, including CatalogItem-created instances | Regression E2E for CLI/API outcomes, applied ComputeInstance configuration, and VMI resources | `tests/e2e/vmaas/regression/test_compute_instance_instance_type.py`; from the repository root, run `uv run pytest tests/e2e/vmaas/regression/test_compute_instance_instance_type.py` | Uses the deployed VMaaS API and Kubernetes endpoints, VM kubeconfig, image, storage tier, subnet, and VM template. Restart-required behavior assumes the single-node VMaaS profile. |
+| DiskImage-backed VM provisioning and reference release | [QE] Regression E2E for running/image projection and image deletion after workload teardown | From the repository root: `uv run pytest -n 0 tests/e2e/vmaas/regression/test_compute_instance_disk_image.py` | Real Fulfillment, operator, AAP, and VM provider; requires the configured VMaaS template, network, instance type, and storage tier. API-only DiskImage CRUD/lifecycle, template defaults/protection, obsolete-image rejection, CaaS missing-image rejection, and BMI catalog cross-tenant rejection belong in Fulfillment `it/`, not E2E. |
 | CaaS deletion helpers and focused teardown ordering | [DEV] Unit regressions for exact NotFound, parent-before-dependent ordering, polling budgets, safe diagnostics, and no mutation | From the repository root: `uv run pytest -n 0 tests/unit/test_caas_teardown_order.py tests/unit/test_cluster_deletion_polling.py tests/unit/test_caas_deletion_diagnostics.py tests/unit/test_caas_worker_bmi_visibility.py tests/unit/test_caas_two_node_sets.py tests/unit/test_caas_selector_contracts.py` | Kubernetes, fulfillment responses, and time are mocked; selector regressions cover NodeSet identity with shared BMITs and shared-only BMIT reference expectations. Does not prove deployed reconciliation. |
 | Focused bare-metal CaaS natural teardown | [QE] E2E for worker BMI removal, natural ClusterOrder removal, independent InfraEnv GC, fulfillment removal, and deleted metering | From the repository root: `uv run pytest -n 0 tests/e2e/caas/sanity/test_cluster_create.py::test_cluster_create --junitxml=/tmp/test-output/caas-bm-teardown-junit.xml` | Requires compatible source-pinned OSAC/operator/installer/AAP images and project source, hub access/auth, cluster template/release/disk images, pull-secret/SSH-key inputs, available virtual BMHs, and healthy Kafka/metering. No teardown completion is mocked. |
 
@@ -36,8 +37,10 @@ feedback test. Two-node-set isolation and explicit/invalid version cases belong
 in CaaS regression; version cases are consolidated in
 `regression/test_cluster_version.py` rather than duplicated in sanity.
 Other CaaS scenarios still using `wait_for_cluster_deletion` do not establish
-that boundary. Both scenarios verify tenant/owner annotations on their worker
-BMIs and wait for all verified workers to disappear (480 attempts at five-second
+that boundary. Both scenarios verify the API worker BMI's tenant, cluster-order
+label and owner-reference annotation, and the Kubernetes CR's tenant annotation
+and BMI UUID label. The API owner-reference annotation is not copied to the CR.
+They wait for all verified workers to disappear (480 attempts at five-second
 intervals). Only then does the parent wait start, with 121 attempts at
 ten-second intervals, followed by
 60 InfraEnv attempts at five-second intervals. These are separate polling

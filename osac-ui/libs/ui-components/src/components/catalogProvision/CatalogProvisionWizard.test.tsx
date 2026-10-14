@@ -12,9 +12,9 @@ import {
   SecretType,
 } from '@osac/types';
 import {
-  BareMetalInstanceTypeSchema,
   ClusterTemplateReferenceSchema,
   ComputeInstanceTemplateReferenceSchema,
+  HostTypeReferenceSchema,
   InstanceTypeState,
   SecurityGroupState,
   StorageTierSchema,
@@ -274,14 +274,21 @@ const apiFixtures: MockApiFixtures = {
         tenant: 'foo',
         version: 1,
       },
+      nodeSets: {
+        compute: {
+          $typeName: 'osac.public.v1.ClusterTemplateNodeSet',
+          hostType: create(HostTypeReferenceSchema, { id: 'acme_1tb' }),
+          size: 3,
+        },
+      },
       description: '',
       parameters: [],
       title: '',
     },
   ],
-  bareMetalInstanceTypes: [
+  hostTypes: [
     {
-      $typeName: 'osac.public.v1.BareMetalInstanceType',
+      $typeName: 'osac.public.v1.HostType',
       id: 'acme_1tb',
       metadata: {
         $typeName: 'osac.public.v1.Metadata',
@@ -295,10 +302,12 @@ const apiFixtures: MockApiFixtures = {
         tenant: 'foo',
         version: 1,
       },
-      spec: create(BareMetalInstanceTypeSchema, { id: 'acme_1tb' }).spec,
+      title: 'ACME 1TB',
+      description: '',
+      interfaces: [],
     },
     {
-      $typeName: 'osac.public.v1.BareMetalInstanceType',
+      $typeName: 'osac.public.v1.HostType',
       id: 'acme_1tb_h100',
       metadata: {
         $typeName: 'osac.public.v1.Metadata',
@@ -312,7 +321,9 @@ const apiFixtures: MockApiFixtures = {
         tenant: 'foo',
         version: 1,
       },
-      spec: create(BareMetalInstanceTypeSchema, { id: 'acme_1tb_h100' }).spec,
+      title: 'ACME 1TB H100',
+      description: '',
+      interfaces: [],
     },
   ],
   virtualNetworks: [

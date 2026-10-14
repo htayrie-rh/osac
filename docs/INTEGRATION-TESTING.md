@@ -135,6 +135,44 @@ Report behavioral coverage, execution readiness, and test execution results
 separately. A case with a proposed harness or unresolved command is planned but
 not execution-ready; static checks passing does not change that status.
 
+## Agentic CI sandbox
+
+The repository overlay provides early Autofix feedback. It does not replace
+authoritative GitHub CI, component integration, or deployed E2E gates. Its
+[touched-area map](../.agentic-ci/AGENTS.md) owns validation of the overlay itself.
+All cases below belong to [DEV]
+[OSAC-6172](https://redhat.atlassian.net/browse/OSAC-6172).
+
+| Behavior | Tier | Execution and boundary |
+|---|---|---|
+| API/schema dependency selection, large tracked/untracked streams, Git fallbacks, UI/E2E routing, and failure propagation | Unit | Use the [canonical local command](../.agentic-ci/AGENTS.md#touched-area-map); real temporary Git repositories and Bash execute the actual YAML validation bodies, while expensive commands are recording doubles |
+| Production setup and API/schema/UI/E2E scenarios | Component integration | Use the production Autofix image and OpenShell runner with the candidate overlay; actual toolchains, allowed registries, lint, supported unit tests, and pytest collection run. No OSAC deployment, container services, Kubernetes API, or provider is started |
+| Deliberate API test failure | Component integration | Add a failing unit test in an isolated production scenario, verify the go-test validation record fails, and run a clean scenario afterward |
+| Dependency copy-back and optional discard | Component integration | Measure three paired trials on the same production image; add exact generated paths only for median savings of at least 10% and five seconds, then verify restoration on reuse. The current overlay discards only `osac-ui/node_modules` and `osac-aap/.venv`. |
+
+Full UI validation remains intentional. E2E collection creates an external venv
+and installs root dependencies once, only when selected. The overlay's
+[skips](../.agentic-ci/config.yml) specify container, Envtest, network, live-service
+and metering-execution exceptions. Collection proves import readiness for
+selected cases; deployed journeys and metering coverage require their own gates.
+Selected/deselected counts are revision-specific evidence, not fixed thresholds.
+
+Production evidence must identify the candidate/base commits, image digest,
+runner revision, effective merged profile, and selected toolchain versions.
+Verify both project-selected interpreters (fulfillment 3.14 and AAP 3.13) with
+Python downloads disabled. Use a fresh setup and select the candidate as the
+overlay source: the runner reads it before the agent runs. Local/Podman runners
+ignore profile overlays and cannot establish this acceptance boundary.
+
+Attach `_run/sandbox-setup.json`, `_run/sandbox-validation.json`, and
+`_run/toolchains.json`, along with module-selection logs, UI results, E2E counts,
+and copy-back measurements. Include `_run/sandbox-discard.json` when paths are
+added. A successful overall agent exit does not imply successful validation;
+inspect required records for failure, timeout, error, or not-run status. Label
+the intentional negative scenario separately. Missing production execution or
+profiling evidence remains an acceptance gap under
+[OSAC-6172](https://redhat.atlassian.net/browse/OSAC-6172).
+
 ## fulfillment-service
 
 Touched-area requirements: [component guide](../fulfillment-service/AGENTS.md#integration-tests).
@@ -150,9 +188,12 @@ Touched-area requirements: [component guide](../fulfillment-service/AGENTS.md#in
 ### Coverage notes
 
 - **CLI commands that only call Fulfillment APIs:** Cover them in `fulfillment-service/it/`.
+- **DiskImage API-only workflows ([DEV]):** `it_disk_images_api_test.go` covers public CRUD for provider admin/shared, tenant-admin, and tenant-user images; deprecation/obsolescence timestamps, default-list visibility, explicit lifecycle filtering, reactivation, template-default name resolution, and template-bound deletion protection. `it_disk_images_tenant_isolation_test.go` covers tenant visibility and access refusal. `it_disk_image_lifecycle_test.go` covers deprecated-image warnings and obsolete-image rejection without ComputeInstance persistence. `it_public_clusters_test.go` checks the selected shared ClusterVersion's missing-image `FailedPrecondition`, version identity, reason, and absence of a persisted cluster. `it_bare_metal_instance_catalog_items_test.go` rejects foreign-tenant image names with `NotFound` and no persisted catalog item.
+  These component-integration cases use real public/private Fulfillment APIs, authentication, and PostgreSQL. The ComputeInstance fixture simulates network readiness and storage-provider configuration; no VM, cluster, AAP, or bare-metal provider lifecycle is exercised. Run the documented Fulfillment installer target above; against an already deployed compatible Kind environment, run `ginkgo run --timeout 20m --focus 'DiskImage API|DiskImage tenant isolation|DiskImage lifecycle|Public clusters rejects a shared ClusterVersion|Bare Metal Instance Catalog Items rejects a cross-tenant DiskImage' it` from `fulfillment-service/`.
+  VM image projection/running and deletion protection through deployed workload teardown remain in `tests/e2e/vmaas/regression/test_compute_instance_disk_image.py`. BMH image selection and deprecated-image provisioning remain in `tests/e2e/bmaas/sanity/test_baremetal_instance_lifecycle.py`; DiskImage-backed CaaS provisioning remains in the CaaS E2Es.
 - **VMaaS ComputeInstance network-attachment Create contract ([OSAC-5562](https://redhat.atlassian.net/browse/OSAC-5562), [OSAC-5563](https://redhat.atlassian.net/browse/OSAC-5563), DEV):** `fulfillment-service/it/it_compute_subnet_test.go` exercises the public API's one-attachment limit, no-persistence errors for missing tenant defaults and missing SecurityGroups on a non-default VirtualNetwork, and persistence of an explicitly specified attachment. `internal/servers/private_compute_instances_server_test.go` covers successful field-by-field tenant-default completion. This is Fulfillment Service and database coverage; provider provisioning remains E2E coverage.
 - **MCP server:** `fulfillment-service/it/it_mcp_server_test.go` uses a real MCP SDK HTTP client and an in-process MCP handler. Its test exchanger supplies the caller's existing API token to the deployed public Fulfillment API and PostgreSQL, and asserts four-tool discovery, tenant visibility, creator attribution, and rejected writes without persisted mutations. `it_mcp_deployed_test.go` runs in the Fulfillment Kind CI job with MCP enabled (`MCP_TEST_ENABLED=true make -C osac-installer test PLATFORM=kind PROFILE=dev NS=osac SUITE=fulfillment`); it checks the deployed TLS route and OAuth metadata, obtains a user token through Keycloak authorization code plus PKCE, lists tools and ComputeInstances through the MCP SDK, and rejects a token scoped to the Fulfillment API. The separate `mcpserver` unit suite covers exchange edge cases. Helm lint and rendering cover the opt-in templates and schema; ordinary profile renders exercise the disabled default. Provider provisioning, VM readiness, and interoperability with external MCP hosts remain outside these tests.
-- **Canonical networking Hub routing:** [`fulfillment-service/it/it_networking_hub_placement_test.go`](../fulfillment-service/it/it_networking_hub_placement_test.go) covers VirtualNetwork, Subnet, SecurityGroup, ExternalIPPool, ExternalIP, ExternalIPAttachment, and NATGateway CR placement on the NetworkClass canonical Hub and absence on a valid alternate Hub. It also verifies that SecurityGroup retains its stored Hub assignment and does not create a duplicate CR when the canonical Hub changes. The fixture uses distinct Hub entries and namespaces on the service Kind cluster; it tests Hub entry and namespace routing, not isolation across separate Kubernetes clusters. The unavailable-canonical/no-fallback case remains controller unit coverage because this deployed-service harness cannot isolate or reset the reconcilers' cached Hub resolution between cases.
+- **Canonical networking Hub routing:** [`fulfillment-service/it/it_networking_hub_placement_test.go`](../fulfillment-service/it/it_networking_hub_placement_test.go) covers VirtualNetwork, Subnet, SecurityGroup, ExternalIPPool, ExternalIP, ExternalIPAttachment, and NATGateway CR placement on the NetworkClass canonical Hub and absence on a valid alternate Hub. It also verifies that two separately provisioned network-attached Cluster resources sharing a subnet use the same Hub, repeated reconciliation does not create duplicate ClusterOrders, a cross-Hub Cluster create fails without a database row or CR, and SecurityGroup retains its stored Hub assignment when the canonical Hub changes. The fixture uses distinct Hub entries and namespaces on the service Kind cluster; it tests Hub entry and namespace routing, not isolation across separate Kubernetes clusters or real provider provisioning. Unavailable-canonical/no-fallback, ComputeInstance, and BareMetalInstance placement remain controller unit coverage because this deployed-service fixture does not isolate reconcilers between cases or exercise provider workflows.
 - **NetworkClass manager registration and capability propagation:** `it_networkclass_manager_capabilities_test.go` creates the NetworkClass first, then adds fabric and Kubernetes manager registrations and verifies the deployed operator persists their capability intersection. The installer target runs this spec separately with the local operator image so the rest of the service-only suite remains isolated from operator reconciliation.
 - **NetworkClass manager readiness:** `it_networkclass_manager_readiness_test.go` covers `PENDING → FAILED` while a manager is missing, recovery to `READY` after its ConfigMap registration appears, and the persisted capability intersection.
 - **Provisioning journeys that cross into operators or providers:** Keep them in `tests/e2e/` and exercise those boundaries explicitly.
@@ -232,6 +273,21 @@ Touched-area requirements: [component guide](../osac-operator/AGENTS.md#integrat
   valid/invalid CA and hostname cases, bundle rotation and last-client retention.
   The production render contract covers mounts/arguments; Kind runs with the
   trust gate disabled. Neither proves a deployed fulfillment TLS endpoint.
+- **Fulfillment OAuth:** `cmd/verified_fulfillment_test.go` uses local TLS OIDC
+  and gRPC endpoints to verify client-credentials token acquisition and
+  authenticated calls in both connection modes. The installer render contract
+  checks the Secret references and issuer ConfigMap.
+- **Cross-cluster fulfillment OAuth:** No deployed suite currently covers this
+  boundary. With bundled Keycloak, the dev installer provisions the existing
+  `osac-controller` credentials through `osac-infra`, but the local
+  `kind-osac-dev` cluster is not a multi-cluster test environment. Add a
+  deployed cross-cluster exercise in a supported environment; track this gap
+  under [OSAC-5939](https://redhat.atlassian.net/browse/OSAC-5939).
+- **Installer schema consumption:** The installer schema exposes the operator
+  credential Secret name and key references. Verify that the Enclave plugin
+  and Wizard consume the updated schema before treating those controls as
+  available there; that pipeline is outside this repository's chart-render
+  tests.
 - **Controller reconciliation, finalizers, status and CRDs:** Drive the public
   reconciler against real API persistence in the existing Controller Suite.
 - **AgentlessNet Subnet prefix guard:** `internal/controller/subnet_controller_test.go` exercises the public `SubnetReconciler.Reconcile` path for `/31`, `/32`, and `/30` CIDRs and confirms rejected prefixes do not invoke the provider. It does not exercise AAP or fabric state.
@@ -379,6 +435,8 @@ Touched-area requirements: [component guide](../osac-aap/AGENTS.md#integration-t
 | Contract | `tests/integration/targets/agentless_net_stub/tasks/baseline.yml`; from `tests/integration/` run `ansible-playbook targets/agentless_net_stub/tasks/baseline.yml -e '@common_vars.yml'` | Fresh Ansible processes run `files/validate_vn_inventory.yml`: real environment lookup, YAML parsing, Cumulus/trunk validation, password rejection, and node/switch registration | AAP, SSH, and Linux/switch provider operations are omitted. |
 | Component integration | `tests/integration/targets/agentless_net_subnet/tasks/baseline.yml`; from `tests/integration/` run `ansible-playbook targets/agentless_net_subnet/tasks/baseline.yml -e '@common_vars.yml'` | Real Kind namespace and VirtualNetwork CR, status-subresource update, and validation of the operator-supplied parent Fulfillment UUID, Kubernetes UID, Ready phase, and tenant | Operator reconciliation, AAP, managed-node SSH, Cumulus switches, Linux VLAN interfaces, and DHCP are omitted. |
 | Component integration ([DEV] OSAC-6306) | `tests/integration/targets/agentless_net_external_ip_pool/tasks/baseline.yml`; after `./setup_test_env.sh`, from `tests/integration/` run `KUBECONFIG="$PWD/kubeconfig-osac-test" K8S_AUTH_KUBECONFIG="$PWD/kubeconfig-osac-test" uv run ansible-playbook targets/agentless_net_external_ip_pool/tasks/baseline.yml -e '@common_vars.yml'` | Real Kind namespace and ExternalIPPool CRs; existing top-level pool playbooks and dispatcher; local Ansible execution of the state module; temporary SQLite identity, retry, identity-checked deletion, and deletion idempotence | No operator reconciliation, deployed AAP, SSH, switches, or network/provider commands. `setup_test_env.sh` creates the dedicated Kind cluster and installs the repository CRDs. |
+| Component integration ([DEV] OSAC-5376) | `tests/integration/targets/netris_subnet_delete/tasks/baseline.yml`; from `osac-aap/` run `make test`, or after `./setup_test_env.sh` from `tests/integration/` run `KUBECONFIG="$PWD/kubeconfig-osac-test" K8S_AUTH_KUBECONFIG="$PWD/kubeconfig-osac-test" uv run ansible-playbook targets/netris_subnet_delete/tasks/baseline.yml -e '@common_vars.yml'` | Real top-level Subnet delete playbook dispatch into `osac.templates.netris` through the `osac.openshift.io/implementation-strategy` annotation, real Netris vnet/ipam roles against a fake Netris HTTP endpoint, and real Kind ConfigMap persistence; ordered V-Net to IPAM to ConfigMap cleanup, success on observed V-Net or IPAM absence, and failure on non-404 provider errors | Real Kind API and ConfigMaps; the Netris HTTP endpoint is a test fixture recording method/path order only; no deployed AAP, operator, switches, or real provider. `setup_test_env.sh` creates the dedicated Kind cluster. |
+| Component integration ([DEV] OSAC-5376) | `tests/integration/targets/netris_parent_delete/tasks/baseline.yml`; from `osac-aap/tests/integration/` run `uv run ansible-playbook targets/netris_parent_delete/tasks/baseline.yml -e '@common_vars.yml'`; also registered in `make test` | Real top-level VirtualNetwork and ExternalIPPool delete playbooks dispatch into `osac.templates.netris` and run the VPC/IPAM roles against a local HTTP endpoint; tests cover 404 after lookup, already absent resources, 400 dependency failures, 500 provider failures, allocation → VPC order for VirtualNetwork, and common subnet → allocation order for ExternalIPPool | Real Ansible subprocesses and loopback HTTP transport; the Netris endpoint is a test fixture, and no Kubernetes objects, deployed AAP, operator, switches, or real provider are exercised. No Kind cluster is needed for the focused command; `make test` still creates one for other targets. |
 | Component integration (focused) | A target under `tests/integration/targets/`; run the corresponding playbook from `tests/integration/` | The specific role workflow and its documented fixtures | Only the dependencies declared by that target; inspect its setup and overrides before claiming a real boundary. |
 | Contract | No dedicated contract suite; use the qualifying [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843) task for AAP/provider coverage | No AAP or provider endpoint is exercised as a contract | The Kind API, mock VMS server, and fixture-driven provider behavior do not prove an AAP or provider contract. |
 | E2E | Cross-component OSAC E2E suites | Complete fulfillment and provisioning flows | Depends on the deployed AAP and provider environment. |
@@ -394,6 +452,8 @@ applicable integration tests separately to validate workflow behavior.
 - **Filters, variable transforms, and isolated plugin logic:** Include invalid input and default handling.
 - **AgentlessNet VirtualNetwork/Subnet state and command helpers:** Unit coverage proves the current v1 schema initialization, fail-closed rejection of incompatible v1/v2 databases, internal allocation and exhaustion, exclusion parsing for bridge memberships and NVUE reserved ranges, parent-lock serialization, retry retention, VLAN interfaces, derived DHCP-manager selection, DHCP rendering/service lifecycle, lease preservation, and diagnostics with mocked provider commands. OSAC-6306 pool unit cases prove immutable identity and idempotent identity-checked deletion. The existing ExternalIPPool operator controller test verifies pool deprovision waits until child ExternalIP CRs are removed. The operator envtest verifies Subnet parent-context construction; the Kind pool target verifies the ExternalIPPool CR's Kubernetes UID, Fulfillment label, tenant, family, and CIDR reach saved state through the existing playbooks. AAP/Kind service-readiness checks do not prove client leases or traffic delivery.
 - **Ansible roles, workflow tasks, hooks, leases, finalizers, or Kubernetes resources:** The test must exercise the role/playbook through Ansible against Kind.
+- **Netris Subnet deletion:** The `netris_subnet_delete` target runs the real top-level delete playbook in a child Ansible process and proves dynamic strategy dispatch, the V-Net to IPAM to ConfigMap order, absence-tolerant V-Net and IPAM subnet deletion, and failure on non-404 provider errors against a fake Netris HTTP fixture and real Kind ConfigMaps. The fixture records method/path order only; it does not prove real Netris 404 semantics or a deployed AAP/provider contract ([OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843)).
+- **Netris parent-network deletion:** The `netris_parent_delete` target runs the real VirtualNetwork and ExternalIPPool delete playbooks against a local HTTP fixture. It proves that a VPC or IPAM allocation removed between lookup and DELETE does not delay ordered cleanup, while 400 dependency and 500 provider errors still fail. It also verifies that absent resources cause no DELETE request. This is caller-side response handling, not a real Netris or deployed AAP/provider contract ([OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843)).
 - **Template publishing TLS:** The `test_cert_validation` play in `collections/ansible_collections/osac/service/roles/publish_templates/tests/test.yml` runs the real role against an untrusted local HTTPS endpoint and asserts certificate rejection before any authenticated HTTP request. The endpoint is a test double; it does not prove a deployed AAP or fulfillment boundary.
 - **Template publishing OAuth:** Unit and local mock-server coverage belong to DEV [OSAC-6084](https://redhat.atlassian.net/browse/OSAC-6084). The token lookup tests validate OIDC discovery, client-credentials exchange, refresh, and sanitized errors; the role fixture verifies Bearer authentication for each published resource type. Neither test proves deployed AAP secret delivery or cross-cluster Keycloak/Fulfillment reachability; QE coverage remains tracked by [OSAC-4843](https://redhat.atlassian.net/browse/OSAC-4843).
 - **Execution-environment definition or dependency inputs:** Image success does not prove the workflow boundary.
@@ -542,9 +602,11 @@ it requires the same source-pinned environment described below and enough
 available BMHs for both worker sets.
 
 The deletion request triggers the test-owned worker BMI wait (480 attempts at
-five-second intervals). Worker ownership is verified through both fulfillment
-and Kubernetes tenant/owner annotations before those IDs enter the deletion
-assertions. Only after all verified BMIs disappear does the
+five-second intervals). Worker ownership is verified through the fulfillment
+BMI's tenant, cluster-order label and owner-reference annotation, plus the
+Kubernetes CR's tenant annotation and BMI UUID label, before those IDs enter
+the deletion assertions. The API owner-reference annotation is not copied to
+the CR. Only after all verified BMIs disappear does the
 read-only parent wait observe the exact ClusterOrder NotFound (121 attempts at
 ten-second intervals); only after parent removal does the separate InfraEnv GC
 wait observe that exact InfraEnv NotFound in the same namespace (60 attempts at

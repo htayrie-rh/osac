@@ -1066,8 +1066,6 @@ var _ = Describe("mutateBMI", func() {
 var _ = Describe("update", func() {
 	It("should preserve operator-managed spec fields when patching an existing CR", func() {
 		ctx := context.Background()
-		ctrl := gomock.NewController(GinkgoT())
-		DeferCleanup(ctrl.Finish)
 
 		const (
 			bmiID        = "bmi-test-id"
@@ -1082,7 +1080,7 @@ var _ = Describe("update", func() {
 				Labels: map[string]string{
 					labels.BareMetalInstanceUuid: bmiID,
 				},
-				Annotations: map[string]string{ownerReferenceAnnotation: "stored-owner-private"},
+				Annotations: map[string]string{"osac.openshift.io/owner-reference": "stored-owner-private"},
 			},
 			Spec: bmfov1alpha1.BareMetalInstanceSpec{
 				TemplateID:     "osac.templates.default",
@@ -1106,19 +1104,21 @@ var _ = Describe("update", func() {
 			WithObjects(existingCR).
 			Build()
 
-		hubCache := controllers.NewMockHubCache(ctrl)
-		hubCache.EXPECT().
-			Get(gomock.Any(), hubID).
-			Return(&controllers.HubEntry{
-				Namespace: hubNamespace,
-				Client:    fakeClient,
-			}, nil)
-
 		var logOutput bytes.Buffer
 		t := &task{
 			r: &function{
-				logger:                       slog.New(slog.NewTextHandler(&logOutput, nil)),
-				hubCache:                     hubCache,
+				logger: slog.New(slog.NewTextHandler(&logOutput, nil)),
+				networkingHubReader: &fakeBareMetalNetworkingHubReader{
+					resolution: controllers.NetworkingHubResolution{
+						NetworkingHub: controllers.NetworkingHub{
+							ID:        hubID,
+							Namespace: hubNamespace,
+							Client:    fakeClient,
+						},
+						HubID: hubID,
+						State: privatev1.NetworkClassState_NETWORK_CLASS_STATE_READY,
+					},
+				},
 				bareMetalInstanceTypesClient: defaultFakeBareMetalInstanceTypesClient(),
 			},
 			bareMetalInstance: privatev1.BareMetalInstance_builder{
@@ -1161,7 +1161,7 @@ var _ = Describe("update", func() {
 			"HostClass must be preserved — it is managed by the bare-metal-fulfillment-operator")
 		Expect(updatedCR.Spec.RestartTrigger).To(Equal(int64(42)))
 		Expect(updatedCR.Spec.NetworkAttachments).To(Equal(existingCR.Spec.NetworkAttachments))
-		Expect(updatedCR.Annotations).To(HaveKeyWithValue(ownerReferenceAnnotation, "stored-owner-private"))
+		Expect(updatedCR.Annotations).To(HaveKeyWithValue("osac.openshift.io/owner-reference", "stored-owner-private"))
 		Expect(t.bareMetalInstance.GetStatus().GetNetworkAttachmentStatuses()).To(HaveLen(1))
 		Expect(t.bareMetalInstance.GetStatus().GetNetworkAttachmentStatuses()[0].GetIpAddress()).To(Equal("192.0.2.10"))
 		Expect(logOutput.String()).To(ContainSubstring("preserving stored network attachments"))

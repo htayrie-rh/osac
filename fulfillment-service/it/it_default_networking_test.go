@@ -23,7 +23,6 @@ import (
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/osac-project/osac/fulfillment-service/internal/kubernetes/labels"
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
@@ -117,14 +116,13 @@ var _ = Describe("Default networking provisioning", func() {
 
 		By("Waiting for VN K8s CR to appear (pass 3: hubClient.Create done)")
 		kubeClient := tool.KubeClient()
-		vnList := &osacv1alpha1.VirtualNetworkList{}
-		Eventually(func(g Gomega) {
-			err := kubeClient.List(ctx, vnList, crclient.MatchingLabels{
-				labels.VirtualNetworkUuid: vnId,
-			})
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(vnList.Items).To(HaveLen(1))
-		}, time.Minute, time.Second).Should(Succeed())
+		waitForNetworkingCR(ctx, listNetworkingCR(
+			kubeClient,
+			labels.VirtualNetworkUuid,
+			vnId,
+			&osacv1alpha1.VirtualNetworkList{},
+			func(objects *osacv1alpha1.VirtualNetworkList) int { return len(objects.Items) },
+		))
 
 		By("Setting default VirtualNetwork to READY (no osac-operator in IT)")
 		vnResp, err := virtualNetworksClient.Get(ctx, privatev1.VirtualNetworksGetRequest_builder{Id: vnId}.Build())
@@ -151,14 +149,13 @@ var _ = Describe("Default networking provisioning", func() {
 		}, time.Minute, time.Second).Should(Succeed())
 
 		By("Verifying default Subnet K8s CR is created")
-		subnetList := &osacv1alpha1.SubnetList{}
-		Eventually(func(g Gomega) {
-			err := kubeClient.List(ctx, subnetList, crclient.MatchingLabels{
-				labels.SubnetUuid: subnetId,
-			})
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(subnetList.Items).To(HaveLen(1))
-		}, time.Minute, time.Second).Should(Succeed())
+		waitForNetworkingCR(ctx, listNetworkingCR(
+			kubeClient,
+			labels.SubnetUuid,
+			subnetId,
+			&osacv1alpha1.SubnetList{},
+			func(objects *osacv1alpha1.SubnetList) int { return len(objects.Items) },
+		))
 
 		By("Waiting for default Subnet to reach PENDING state before overriding")
 		Eventually(func(g Gomega) {
@@ -193,14 +190,13 @@ var _ = Describe("Default networking provisioning", func() {
 		}, time.Minute, time.Second).Should(Succeed())
 
 		By("Verifying default SecurityGroup K8s CR is created")
-		sgList := &osacv1alpha1.SecurityGroupList{}
-		Eventually(func(g Gomega) {
-			err := kubeClient.List(ctx, sgList, crclient.MatchingLabels{
-				labels.SecurityGroupUuid: sgId,
-			})
-			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(sgList.Items).To(HaveLen(1))
-		}, time.Minute, time.Second).Should(Succeed())
+		waitForNetworkingCR(ctx, listNetworkingCR(
+			kubeClient,
+			labels.SecurityGroupUuid,
+			sgId,
+			&osacv1alpha1.SecurityGroupList{},
+			func(objects *osacv1alpha1.SecurityGroupList) int { return len(objects.Items) },
+		))
 
 		By("Waiting for default SecurityGroup to reach PENDING state before overriding")
 		Eventually(func(g Gomega) {
@@ -322,6 +318,44 @@ var _ = Describe("Default networking provisioning", func() {
 				Equal(privatev1.SecurityGroupState_SECURITY_GROUP_STATE_PENDING))
 			sgId = sgResp.GetItems()[0].GetId()
 		}, time.Minute, time.Second).Should(Succeed())
+
+		By("Waiting for the default Subnet to reach PENDING before overriding it")
+		Eventually(func(g Gomega) {
+			resp, err := subnetsClient.Get(ctx, privatev1.SubnetsGetRequest_builder{Id: subnetId}.Build())
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(resp.GetObject().GetStatus().GetState()).To(
+				Equal(privatev1.SubnetState_SUBNET_STATE_PENDING))
+		}, time.Minute, time.Second).Should(Succeed())
+		subnetResp, err := subnetsClient.Get(ctx, privatev1.SubnetsGetRequest_builder{Id: subnetId}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		subnetObj := subnetResp.GetObject()
+		subnetObj.SetStatus(privatev1.SubnetStatus_builder{
+			State: privatev1.SubnetState_SUBNET_STATE_READY,
+		}.Build())
+		_, err = subnetsClient.Update(ctx, privatev1.SubnetsUpdateRequest_builder{
+			Object:     subnetObj,
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"status.state"}},
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+
+		By("Waiting for the default SecurityGroup to reach PENDING before overriding it")
+		Eventually(func(g Gomega) {
+			resp, err := securityGroupsClient.Get(ctx, privatev1.SecurityGroupsGetRequest_builder{Id: sgId}.Build())
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(resp.GetObject().GetStatus().GetState()).To(
+				Equal(privatev1.SecurityGroupState_SECURITY_GROUP_STATE_PENDING))
+		}, time.Minute, time.Second).Should(Succeed())
+		sgResp, err := securityGroupsClient.Get(ctx, privatev1.SecurityGroupsGetRequest_builder{Id: sgId}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		sgObj := sgResp.GetObject()
+		sgObj.SetStatus(privatev1.SecurityGroupStatus_builder{
+			State: privatev1.SecurityGroupState_SECURITY_GROUP_STATE_READY,
+		}.Build())
+		_, err = securityGroupsClient.Update(ctx, privatev1.SecurityGroupsUpdateRequest_builder{
+			Object:     sgObj,
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"status.state"}},
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
 
 		vnBefore, err := virtualNetworksClient.Get(ctx, privatev1.VirtualNetworksGetRequest_builder{Id: vnId}.Build())
 		Expect(err).ToNot(HaveOccurred())
