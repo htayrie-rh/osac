@@ -218,9 +218,23 @@ var _ = Describe("Labels", func() {
 				Id: object.GetId(),
 				Metadata: privatev1.Metadata_builder{
 					Labels: map[string]string{
-						"admin.osac.openshift.io/managed":         "latest-system-value",
+						"admin.osac.openshift.io/managed":         "old-system-value",
 						"operator.admin.osac.openshift.io/remove": "removed-by-writer",
 						"ordinary": "stored-before-public-update",
+					},
+				}.Build(),
+			}.Build(),
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.labels"}},
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		_, err = adminClustersClient.Update(ctx, privatev1.ClustersUpdateRequest_builder{
+			Object: privatev1.Cluster_builder{
+				Id: object.GetId(),
+				Metadata: privatev1.Metadata_builder{
+					Labels: map[string]string{
+						"admin.osac.openshift.io/managed":        "latest-system-value",
+						"operator.admin.osac.openshift.io/added": "added-by-writer",
+						"ordinary":                               "stored-before-public-update",
 					},
 				}.Build(),
 			}.Build(),
@@ -261,8 +275,9 @@ var _ = Describe("Labels", func() {
 		privateResponse, err := adminClustersClient.Get(ctx, privatev1.ClustersGetRequest_builder{Id: object.GetId()}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(privateResponse.GetObject().GetMetadata().GetLabels()).To(Equal(map[string]string{
-			"admin.osac.openshift.io/managed": "latest-system-value",
-			"public":                          "replacement",
+			"admin.osac.openshift.io/managed":        "latest-system-value",
+			"operator.admin.osac.openshift.io/added": "added-by-writer",
+			"public":                                 "replacement",
 		}))
 		adminPublicResponse, err := publicAdminClustersClient.Get(ctx, publicv1.ClustersGetRequest_builder{Id: object.GetId()}.Build())
 		Expect(err).ToNot(HaveOccurred())

@@ -220,9 +220,23 @@ var _ = Describe("Annotations", func() {
 				Id: object.GetId(),
 				Metadata: privatev1.Metadata_builder{
 					Annotations: map[string]string{
-						"admin.osac.openshift.io/provider":        "latest-system-value",
+						"admin.osac.openshift.io/provider":        "old-system-value",
 						"operator.admin.osac.openshift.io/remove": "removed-by-writer",
 						"ordinary": "stored-before-public-update",
+					},
+				}.Build(),
+			}.Build(),
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.annotations"}},
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		_, err = adminClustersClient.Update(ctx, privatev1.ClustersUpdateRequest_builder{
+			Object: privatev1.Cluster_builder{
+				Id: object.GetId(),
+				Metadata: privatev1.Metadata_builder{
+					Annotations: map[string]string{
+						"admin.osac.openshift.io/provider":       "latest-system-value",
+						"operator.admin.osac.openshift.io/added": "added-by-writer",
+						"ordinary":                               "stored-before-public-update",
 					},
 				}.Build(),
 			}.Build(),
@@ -253,8 +267,9 @@ var _ = Describe("Annotations", func() {
 		privateResponse, err := adminClustersClient.Get(ctx, privatev1.ClustersGetRequest_builder{Id: object.GetId()}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(privateResponse.GetObject().GetMetadata().GetAnnotations()).To(Equal(map[string]string{
-			"admin.osac.openshift.io/provider": "latest-system-value",
-			"public":                           "replacement",
+			"admin.osac.openshift.io/provider":       "latest-system-value",
+			"operator.admin.osac.openshift.io/added": "added-by-writer",
+			"public":                                 "replacement",
 		}))
 		adminPublicResponse, err := publicAdminClustersClient.Get(ctx, publicv1.ClustersGetRequest_builder{Id: object.GetId()}.Build())
 		Expect(err).ToNot(HaveOccurred())
@@ -287,7 +302,7 @@ var _ = Describe("Annotations", func() {
 				Expect(status.Message()).To(Equal(expected))
 			})
 
-			By("Updating a cluster with a valid annotation key", func() {
+			By("Updating a cluster with the same invalid annotation key", func() {
 				createResponse, err := clustersClient.Create(ctx, publicv1.ClustersCreateRequest_builder{
 					Object: publicv1.Cluster_builder{
 						Metadata: publicv1.Metadata_builder{
