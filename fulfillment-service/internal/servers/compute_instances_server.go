@@ -222,7 +222,7 @@ func (s *ComputeInstancesServer) Create(ctx context.Context,
 			"Failed to map public compute instance to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process compute instance")
+		err = publicInputMappingError(err, "failed to process compute instance")
 		return
 	}
 
@@ -259,6 +259,10 @@ func (s *ComputeInstancesServer) Create(ctx context.Context,
 
 func (s *ComputeInstancesServer) Update(ctx context.Context,
 	request *publicv1.ComputeInstancesUpdateRequest) (response *publicv1.ComputeInstancesUpdateResponse, err error) {
+	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
+		return nil, err
+	}
+
 	// Validate the request:
 	publicComputeInstance := request.GetObject()
 	if publicComputeInstance == nil {
@@ -307,7 +311,7 @@ func (s *ComputeInstancesServer) Update(ctx context.Context,
 			"Failed to map public compute instance to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process compute instance")
+		err = publicInputMappingError(err, "failed to process compute instance")
 		return
 	}
 	if publicComputeInstance.GetStatus() == nil && preservedStatus != nil {

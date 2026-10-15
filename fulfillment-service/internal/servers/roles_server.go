@@ -213,7 +213,7 @@ func (s *RolesServer) Create(ctx context.Context,
 			"Failed to map public role to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process role")
+		err = publicInputMappingError(err, "failed to process role")
 		return
 	}
 
@@ -244,6 +244,10 @@ func (s *RolesServer) Create(ctx context.Context,
 
 func (s *RolesServer) Update(ctx context.Context,
 	request *publicv1.RolesUpdateRequest) (response *publicv1.RolesUpdateResponse, err error) {
+	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
+		return nil, err
+	}
+
 	publicRole := request.GetObject()
 	if publicRole == nil {
 		err = grpcstatus.Errorf(grpccodes.InvalidArgument, "object is mandatory")
@@ -262,7 +266,7 @@ func (s *RolesServer) Update(ctx context.Context,
 			"Failed to map public role to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process role")
+		err = publicInputMappingError(err, "failed to process role")
 		return
 	}
 

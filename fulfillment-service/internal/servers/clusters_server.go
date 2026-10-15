@@ -225,7 +225,7 @@ func (s *ClustersServer) Create(ctx context.Context,
 			"Failed to map public cluster to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process cluster")
+		err = publicInputMappingError(err, "failed to process cluster")
 		return
 	}
 
@@ -259,6 +259,10 @@ func (s *ClustersServer) Create(ctx context.Context,
 
 func (s *ClustersServer) Update(ctx context.Context,
 	request *publicv1.ClustersUpdateRequest) (response *publicv1.ClustersUpdateResponse, err error) {
+	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
+		return nil, err
+	}
+
 	// Validate the request:
 	publicCluster := request.GetObject()
 	if publicCluster == nil {
@@ -306,7 +310,7 @@ func (s *ClustersServer) Update(ctx context.Context,
 			"Failed to map public cluster to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process cluster")
+		err = publicInputMappingError(err, "failed to process cluster")
 		return
 	}
 

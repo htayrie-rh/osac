@@ -350,6 +350,34 @@ var _ = Describe("Clusters server", func() {
 			seedAddOnOperator(ctx, "unpublished-operator-id", "unpublished-operator", false)
 		})
 
+		It("rejects reserved metadata on public create", func() {
+			response, err := server.ClustersServer.Create(ctx, publicv1.ClustersCreateRequest_builder{
+				Object: publicv1.Cluster_builder{
+					Metadata: publicv1.Metadata_builder{
+						Labels: map[string]string{"admin.osac.openshift.io/managed": "true"},
+					}.Build(),
+				}.Build(),
+			}.Build())
+			Expect(response).To(BeNil())
+			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
+			Expect(grpcstatus.Convert(err).Message()).To(Equal(reservedMetadataError))
+		})
+
+		It("rejects reserved metadata outside the public update mask", func() {
+			response, err := server.ClustersServer.Update(ctx, publicv1.ClustersUpdateRequest_builder{
+				Object: publicv1.Cluster_builder{
+					Id: "cluster-with-reserved-metadata",
+					Metadata: publicv1.Metadata_builder{
+						Labels: map[string]string{"admin.osac.openshift.io/managed": "true"},
+					}.Build(),
+				}.Build(),
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"spec.description"}},
+			}.Build())
+			Expect(response).To(BeNil())
+			Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
+			Expect(grpcstatus.Convert(err).Message()).To(Equal(reservedMetadataError))
+		})
+
 		It("resolves a published add-on operator reference during public create", func() {
 			response, err := server.Create(ctx, publicv1.ClustersCreateRequest_builder{
 				Object: publicv1.Cluster_builder{

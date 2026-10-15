@@ -261,7 +261,7 @@ func (s *VolumesServer) Create(ctx context.Context,
 			"Failed to map public volume to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process volume")
+		err = publicInputMappingError(err, "failed to process volume")
 		return
 	}
 
@@ -299,6 +299,10 @@ func (s *VolumesServer) Create(ctx context.Context,
 // the private server regardless of state.
 func (s *VolumesServer) Update(ctx context.Context,
 	request *publicv1.VolumesUpdateRequest) (response *publicv1.VolumesUpdateResponse, err error) {
+	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
+		return nil, err
+	}
+
 	// Validate the request:
 	publicVolume := request.GetObject()
 	if publicVolume == nil {
@@ -345,7 +349,7 @@ func (s *VolumesServer) Update(ctx context.Context,
 			"Failed to map public volume to private",
 			slog.Any("error", err),
 		)
-		err = grpcstatus.Errorf(grpccodes.Internal, "failed to process volume")
+		err = publicInputMappingError(err, "failed to process volume")
 		return
 	}
 

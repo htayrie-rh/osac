@@ -19,6 +19,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -432,6 +434,44 @@ var _ = Describe("Generic mapper", func() {
 		}))
 		Expect(publicObject.GetSpec().GetNodeSets()).To(HaveKey("admin.osac.openshift.io/ordinary-map"))
 		Expect(proto.Equal(privateObject, original)).To(BeTrue())
+	})
+
+	It("rejects reserved metadata on public input before copying", func() {
+		publicObject := publicv1.Cluster_builder{
+			Id: "input-cluster",
+			Metadata: publicv1.Metadata_builder{
+				Name: "public-name",
+				Labels: map[string]string{
+					"admin.osac.openshift.io/managed":     "true",
+					"provider.admin.osac.openshift.io/id": "provider-id",
+				},
+				Annotations: map[string]string{
+					"admin.osac.openshift.io/owner": "system",
+				},
+			}.Build(),
+		}.Build()
+		privateObject := privatev1.Cluster_builder{
+			Id: "unchanged-id",
+			Metadata: privatev1.Metadata_builder{
+				Name: "unchanged-name",
+				Labels: map[string]string{
+					"existing": "unchanged",
+				},
+			}.Build(),
+		}.Build()
+		originalSource := proto.Clone(publicObject)
+		originalDestination := proto.Clone(privateObject)
+
+		mapper, err := NewGenericMapper[*publicv1.Cluster, *privatev1.Cluster]().
+			SetLogger(logger).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
+
+		err = mapper.Copy(ctx, publicObject, privateObject)
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
+		Expect(grpcstatus.Convert(err).Message()).To(Equal(reservedMetadataError))
+		Expect(proto.Equal(publicObject, originalSource)).To(BeTrue())
+		Expect(proto.Equal(privateObject, originalDestination)).To(BeTrue())
 	})
 
 	It("omits reserved metadata from public SelfSubjectAccessReview projections", func() {

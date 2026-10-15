@@ -21,6 +21,8 @@ import (
 	"slices"
 	"strings"
 
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -123,6 +125,9 @@ func (m *GenericMapper[From, To]) Copy(ctx context.Context, from From, to To) er
 	if !fromReflect.IsValid() || !toReflect.IsValid() {
 		return nil
 	}
+	if err := validatePublicObjectMetadata(from); err != nil {
+		return err
+	}
 	if err := m.copyMessage(fromReflect, toReflect); err != nil {
 		return err
 	}
@@ -132,7 +137,10 @@ func (m *GenericMapper[From, To]) Copy(ctx context.Context, from From, to To) er
 	return nil
 }
 
-const reservedMetadataDomain = "admin.osac.openshift.io"
+const (
+	reservedMetadataDomain = "admin.osac.openshift.io"
+	reservedMetadataError  = "Label or annotation is reserved for use by the system."
+)
 
 func isReservedMetadataKey(key string) bool {
 	separator := strings.IndexByte(key, '/')
@@ -141,6 +149,87 @@ func isReservedMetadataKey(key string) bool {
 	}
 	domain := key[:separator]
 	return domain == reservedMetadataDomain || strings.HasSuffix(domain, "."+reservedMetadataDomain)
+}
+
+func validatePublicMetadata(message protoreflect.Message) error {
+	if !message.IsValid() {
+		return nil
+	}
+	if message.Descriptor().FullName() == "osac.public.v1.Metadata" {
+		for _, name := range []protoreflect.Name{"labels", "annotations"} {
+			field := message.Descriptor().Fields().ByName(name)
+			if field == nil || !message.Has(field) {
+				continue
+			}
+			values := message.Get(field).Map()
+			reserved := false
+			values.Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
+				reserved = isReservedMetadataKey(key.String())
+				return !reserved
+			})
+			if reserved {
+				return grpcstatus.Error(grpccodes.InvalidArgument, reservedMetadataError)
+			}
+		}
+	}
+
+	fields := message.Descriptor().Fields()
+	for i := range fields.Len() {
+		field := fields.Get(i)
+		if !message.Has(field) {
+			continue
+		}
+		if field.IsList() {
+			if field.Message() == nil {
+				continue
+			}
+			list := message.Get(field).List()
+			for j := range list.Len() {
+				if err := validatePublicMetadata(list.Get(j).Message()); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if field.IsMap() {
+			if field.MapValue().Message() == nil {
+				continue
+			}
+			var validationErr error
+			message.Get(field).Map().Range(func(_ protoreflect.MapKey, value protoreflect.Value) bool {
+				validationErr = validatePublicMetadata(value.Message())
+				return validationErr == nil
+			})
+			if validationErr != nil {
+				return validationErr
+			}
+			continue
+		}
+		if field.Message() != nil {
+			if err := validatePublicMetadata(message.Get(field).Message()); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validatePublicObjectMetadata(object proto.Message) error {
+	if object == nil {
+		return nil
+	}
+	message := object.ProtoReflect()
+	if !message.IsValid() || message.Descriptor().ParentFile().Package() != "osac.public.v1" {
+		return nil
+	}
+	return validatePublicMetadata(message)
+}
+
+func publicInputMappingError(err error, message string) error {
+	if grpcstatus.Code(err) == grpccodes.InvalidArgument {
+		return err
+	}
+	return grpcstatus.Error(grpccodes.Internal, message)
 }
 
 func filterReservedMetadata(message protoreflect.Message) {
