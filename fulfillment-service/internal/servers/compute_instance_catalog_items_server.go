@@ -208,6 +208,7 @@ func (s *ComputeInstanceCatalogItemsServer) Create(ctx context.Context,
 
 func (s *ComputeInstanceCatalogItemsServer) Update(ctx context.Context,
 	request *publicv1.ComputeInstanceCatalogItemsUpdateRequest) (response *publicv1.ComputeInstanceCatalogItemsUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

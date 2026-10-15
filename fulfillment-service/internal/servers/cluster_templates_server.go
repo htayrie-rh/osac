@@ -245,6 +245,7 @@ func (s *ClusterTemplatesServer) Create(ctx context.Context,
 
 func (s *ClusterTemplatesServer) Update(ctx context.Context,
 	request *publicv1.ClusterTemplatesUpdateRequest) (response *publicv1.ClusterTemplatesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

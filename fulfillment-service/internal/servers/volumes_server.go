@@ -299,6 +299,7 @@ func (s *VolumesServer) Create(ctx context.Context,
 // the private server regardless of state.
 func (s *VolumesServer) Update(ctx context.Context,
 	request *publicv1.VolumesUpdateRequest) (response *publicv1.VolumesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

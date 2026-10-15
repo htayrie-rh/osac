@@ -207,6 +207,7 @@ func (s *ClusterCatalogItemsServer) Create(ctx context.Context,
 
 func (s *ClusterCatalogItemsServer) Update(ctx context.Context,
 	request *publicv1.ClusterCatalogItemsUpdateRequest) (response *publicv1.ClusterCatalogItemsUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

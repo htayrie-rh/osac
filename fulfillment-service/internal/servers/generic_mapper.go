@@ -151,6 +151,52 @@ func isReservedMetadataKey(key string) bool {
 	return domain == reservedMetadataDomain || strings.HasSuffix(domain, "."+reservedMetadataDomain)
 }
 
+func restoreReservedMetadata(current, candidate proto.Message) {
+	if current == nil || candidate == nil {
+		return
+	}
+	currentMessage := current.ProtoReflect()
+	candidateMessage := candidate.ProtoReflect()
+	if !currentMessage.IsValid() || !candidateMessage.IsValid() ||
+		currentMessage.Descriptor().FullName() != candidateMessage.Descriptor().FullName() {
+		return
+	}
+	currentMetadataField := currentMessage.Descriptor().Fields().ByName("metadata")
+	candidateMetadataField := candidateMessage.Descriptor().Fields().ByName("metadata")
+	if currentMetadataField == nil || candidateMetadataField == nil ||
+		currentMetadataField.Message() == nil || candidateMetadataField.Message() == nil ||
+		!currentMessage.Has(currentMetadataField) {
+		return
+	}
+	currentMetadata := currentMessage.Get(currentMetadataField).Message()
+	candidateMetadata := candidateMessage.Mutable(candidateMetadataField).Message()
+	for _, name := range []protoreflect.Name{"labels", "annotations"} {
+		currentField := currentMetadata.Descriptor().Fields().ByName(name)
+		candidateField := candidateMetadata.Descriptor().Fields().ByName(name)
+		if currentField == nil || candidateField == nil || !currentField.IsMap() || !candidateField.IsMap() ||
+			currentField.MapValue().Kind() != protoreflect.StringKind || candidateField.MapValue().Kind() != protoreflect.StringKind {
+			continue
+		}
+		candidateValues := candidateMetadata.Mutable(candidateField).Map()
+		var candidateReservedKeys []protoreflect.MapKey
+		candidateValues.Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
+			if isReservedMetadataKey(key.String()) {
+				candidateReservedKeys = append(candidateReservedKeys, key)
+			}
+			return true
+		})
+		for _, key := range candidateReservedKeys {
+			candidateValues.Clear(key)
+		}
+		currentMetadata.Get(currentField).Map().Range(func(key protoreflect.MapKey, value protoreflect.Value) bool {
+			if isReservedMetadataKey(key.String()) {
+				candidateValues.Set(key, value)
+			}
+			return true
+		})
+	}
+}
+
 func validatePublicMetadata(message protoreflect.Message) error {
 	if !message.IsValid() {
 		return nil

@@ -242,6 +242,7 @@ func (s *UsersServer) Create(ctx context.Context,
 
 func (s *UsersServer) Update(ctx context.Context,
 	request *publicv1.UsersUpdateRequest) (response *publicv1.UsersUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

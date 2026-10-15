@@ -45,6 +45,17 @@ import (
 // the operation without changing the request or stored object.
 type PrepareCandidateFunc[O dao.Object] func(ctx context.Context, current, candidate O) error
 
+type publicAPIViewContextKey struct{}
+
+func withPublicAPIView(ctx context.Context) context.Context {
+	return context.WithValue(ctx, publicAPIViewContextKey{}, true)
+}
+
+func isPublicAPIView(ctx context.Context) bool {
+	isPublic, _ := ctx.Value(publicAPIViewContextKey{}).(bool)
+	return isPublic
+}
+
 // GenericServerBuilder contains the data and logic needed to create new generic servers.
 type GenericServerBuilder[O dao.Object] struct {
 	logger            *slog.Logger
@@ -743,6 +754,9 @@ func (s *GenericServer[O]) updateWithCandidatePreparation(
 	} else {
 		tmpObject = proto.Clone(requestObject).(O)
 	}
+	if isPublicAPIView(ctx) {
+		restoreReservedMetadata(currentObject, tmpObject)
+	}
 
 	if !prepareBeforeValidation {
 		// Validate the merged object using protovalidate.
@@ -787,6 +801,9 @@ func (s *GenericServer[O]) updateWithCandidatePreparation(
 		preparedMetadata := proto.Clone(s.getMetadata(tmpObject)).(metadataIface)
 		if err = prepareCandidate(ctx, proto.Clone(currentObject).(O), tmpObject); err != nil {
 			return err
+		}
+		if isPublicAPIView(ctx) {
+			restoreReservedMetadata(currentObject, tmpObject)
 		}
 		if err = s.validatePreparedCandidate(ctx, tmpObject, preparedID, preparedMetadata); err != nil {
 			return err

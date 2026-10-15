@@ -267,6 +267,7 @@ func (s *InstanceTypesServer) Create(ctx context.Context,
 
 func (s *InstanceTypesServer) Update(ctx context.Context,
 	request *publicv1.InstanceTypesUpdateRequest) (response *publicv1.InstanceTypesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

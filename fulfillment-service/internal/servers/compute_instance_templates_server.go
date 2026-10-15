@@ -246,6 +246,7 @@ func (s *ComputeInstanceTemplatesServer) Create(ctx context.Context,
 
 func (s *ComputeInstanceTemplatesServer) Update(ctx context.Context,
 	request *publicv1.ComputeInstanceTemplatesUpdateRequest) (response *publicv1.ComputeInstanceTemplatesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

@@ -234,6 +234,7 @@ func (s *RoleBindingsServer) Create(ctx context.Context,
 
 func (s *RoleBindingsServer) Update(ctx context.Context,
 	request *publicv1.RoleBindingsUpdateRequest) (response *publicv1.RoleBindingsUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

@@ -259,6 +259,7 @@ func (s *ComputeInstancesServer) Create(ctx context.Context,
 
 func (s *ComputeInstancesServer) Update(ctx context.Context,
 	request *publicv1.ComputeInstancesUpdateRequest) (response *publicv1.ComputeInstancesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

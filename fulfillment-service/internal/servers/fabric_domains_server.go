@@ -169,6 +169,7 @@ func (s *FabricDomainsServer) Create(ctx context.Context, request *publicv1.Fabr
 }
 
 func (s *FabricDomainsServer) Update(ctx context.Context, request *publicv1.FabricDomainsUpdateRequest) (*publicv1.FabricDomainsUpdateResponse, error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

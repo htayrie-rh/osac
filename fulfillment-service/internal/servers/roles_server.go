@@ -244,6 +244,7 @@ func (s *RolesServer) Create(ctx context.Context,
 
 func (s *RolesServer) Update(ctx context.Context,
 	request *publicv1.RolesUpdateRequest) (response *publicv1.RolesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

@@ -241,6 +241,7 @@ func (s *DiskImagesServer) Create(ctx context.Context,
 
 func (s *DiskImagesServer) Update(ctx context.Context,
 	request *publicv1.DiskImagesUpdateRequest) (response *publicv1.DiskImagesUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

@@ -234,6 +234,7 @@ func (s *ProjectMembershipsServer) Create(ctx context.Context,
 
 func (s *ProjectMembershipsServer) Update(ctx context.Context,
 	request *publicv1.ProjectMembershipsUpdateRequest) (response *publicv1.ProjectMembershipsUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

@@ -436,6 +436,58 @@ var _ = Describe("Generic mapper", func() {
 		Expect(proto.Equal(privateObject, original)).To(BeTrue())
 	})
 
+	It("restores reserved metadata from the current object", func() {
+		current := privatev1.Cluster_builder{
+			Metadata: privatev1.Metadata_builder{
+				Labels: map[string]string{
+					"admin.osac.openshift.io/managed":          "system-current",
+					"operator.admin.osac.openshift.io/managed": "operator-current",
+					"ordinary": "old",
+				},
+				Annotations: map[string]string{
+					"admin.osac.openshift.io/owner": "system-current",
+					"ordinary":                      "old",
+				},
+			}.Build(),
+		}.Build()
+		candidate := privatev1.Cluster_builder{
+			Metadata: privatev1.Metadata_builder{
+				Labels: map[string]string{
+					"admin.osac.openshift.io/managed":          "stale-request-value",
+					"operator.admin.osac.openshift.io/managed": "stale-operator-value",
+					"ordinary": "updated",
+					"new":      "added",
+				},
+				Annotations: map[string]string{"ordinary": "updated"},
+			}.Build(),
+		}.Build()
+		originalCurrent := proto.Clone(current)
+
+		restoreReservedMetadata(current, candidate)
+
+		Expect(candidate.GetMetadata().GetLabels()).To(Equal(map[string]string{
+			"admin.osac.openshift.io/managed":          "system-current",
+			"operator.admin.osac.openshift.io/managed": "operator-current",
+			"ordinary": "updated",
+			"new":      "added",
+		}))
+		Expect(candidate.GetMetadata().GetAnnotations()).To(Equal(map[string]string{
+			"admin.osac.openshift.io/owner": "system-current",
+			"ordinary":                      "updated",
+		}))
+		Expect(proto.Equal(current, originalCurrent)).To(BeTrue())
+
+		metadataOmittedCandidate := privatev1.Cluster_builder{}.Build()
+		restoreReservedMetadata(current, metadataOmittedCandidate)
+		Expect(metadataOmittedCandidate.GetMetadata().GetLabels()).To(Equal(map[string]string{
+			"admin.osac.openshift.io/managed":          "system-current",
+			"operator.admin.osac.openshift.io/managed": "operator-current",
+		}))
+		Expect(metadataOmittedCandidate.GetMetadata().GetAnnotations()).To(Equal(map[string]string{
+			"admin.osac.openshift.io/owner": "system-current",
+		}))
+	})
+
 	It("rejects reserved metadata on public input before copying", func() {
 		publicObject := publicv1.Cluster_builder{
 			Id: "input-cluster",

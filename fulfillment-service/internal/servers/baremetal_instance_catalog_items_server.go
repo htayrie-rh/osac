@@ -217,6 +217,7 @@ func (s *BareMetalInstanceCatalogItemsServer) Create(ctx context.Context,
 
 func (s *BareMetalInstanceCatalogItemsServer) Update(ctx context.Context,
 	request *publicv1.BareMetalInstanceCatalogItemsUpdateRequest) (response *publicv1.BareMetalInstanceCatalogItemsUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}

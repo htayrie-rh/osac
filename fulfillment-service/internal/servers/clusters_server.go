@@ -259,6 +259,7 @@ func (s *ClustersServer) Create(ctx context.Context,
 
 func (s *ClustersServer) Update(ctx context.Context,
 	request *publicv1.ClustersUpdateRequest) (response *publicv1.ClustersUpdateResponse, err error) {
+	ctx = withPublicAPIView(ctx)
 	if err := validatePublicObjectMetadata(request.GetObject()); err != nil {
 		return nil, err
 	}
