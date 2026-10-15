@@ -382,4 +382,76 @@ var _ = Describe("Generic mapper", func() {
 			}.Build(),
 		),
 	)
+
+	It("omits reserved keys only from public Metadata without mutating the source", func() {
+		labels := map[string]string{
+			"admin.osac.openshift.io/managed":       "system",
+			"provider.admin.osac.openshift.io/id":   "provider",
+			"fakeadmin.osac.openshift.io/ordinary":  "ordinary",
+			"admin.osac.openshift.io.example/value": "ordinary",
+			"admin.osac.openshift.io":               "slashless",
+			"Admin.osac.openshift.io/managed":       "mixed-case",
+			"osac.openshift.io/tenant":              "tenant-a",
+		}
+		annotations := map[string]string{
+			"admin.osac.openshift.io/managed":      "system",
+			"provider.admin.osac.openshift.io/id":  "provider",
+			"fakeadmin.osac.openshift.io/ordinary": "ordinary",
+		}
+		privateObject := privatev1.Cluster_builder{
+			Metadata: privatev1.Metadata_builder{
+				Labels:      labels,
+				Annotations: annotations,
+			}.Build(),
+			Spec: privatev1.ClusterSpec_builder{
+				NodeSets: map[string]*privatev1.ClusterNodeSet{
+					"admin.osac.openshift.io/ordinary-map": privatev1.ClusterNodeSet_builder{
+						Size: proto.Int32(1),
+					}.Build(),
+				},
+			}.Build(),
+		}.Build()
+		original := proto.Clone(privateObject)
+
+		mapper, err := NewGenericMapper[*privatev1.Cluster, *publicv1.Cluster]().
+			SetLogger(logger).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
+
+		publicObject := &publicv1.Cluster{}
+		Expect(mapper.Copy(ctx, privateObject, publicObject)).To(Succeed())
+		Expect(publicObject.GetMetadata().GetLabels()).To(Equal(map[string]string{
+			"fakeadmin.osac.openshift.io/ordinary":  "ordinary",
+			"admin.osac.openshift.io.example/value": "ordinary",
+			"admin.osac.openshift.io":               "slashless",
+			"Admin.osac.openshift.io/managed":       "mixed-case",
+			"osac.openshift.io/tenant":              "tenant-a",
+		}))
+		Expect(publicObject.GetMetadata().GetAnnotations()).To(Equal(map[string]string{
+			"fakeadmin.osac.openshift.io/ordinary": "ordinary",
+		}))
+		Expect(publicObject.GetSpec().GetNodeSets()).To(HaveKey("admin.osac.openshift.io/ordinary-map"))
+		Expect(proto.Equal(privateObject, original)).To(BeTrue())
+	})
+
+	It("omits reserved metadata from public SelfSubjectAccessReview projections", func() {
+		privateObject := privatev1.SelfSubjectAccessReview_builder{
+			Metadata: privatev1.Metadata_builder{
+				Labels: map[string]string{
+					"admin.osac.openshift.io/review": "private",
+					"ordinary":                       "visible",
+				},
+			}.Build(),
+		}.Build()
+
+		mapper, err := NewGenericMapper[*privatev1.SelfSubjectAccessReview, *publicv1.SelfSubjectAccessReview]().
+			SetLogger(logger).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
+
+		publicObject := &publicv1.SelfSubjectAccessReview{}
+		Expect(mapper.Copy(ctx, privateObject, publicObject)).To(Succeed())
+		Expect(publicObject.GetMetadata().GetLabels()).To(Equal(map[string]string{"ordinary": "visible"}))
+		Expect(privateObject.GetMetadata().GetLabels()).To(HaveKeyWithValue("admin.osac.openshift.io/review", "private"))
+	})
 })

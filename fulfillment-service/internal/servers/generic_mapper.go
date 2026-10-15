@@ -123,7 +123,81 @@ func (m *GenericMapper[From, To]) Copy(ctx context.Context, from From, to To) er
 	if !fromReflect.IsValid() || !toReflect.IsValid() {
 		return nil
 	}
-	return m.copyMessage(fromReflect, toReflect)
+	if err := m.copyMessage(fromReflect, toReflect); err != nil {
+		return err
+	}
+	if toReflect.Descriptor().ParentFile().Package() == "osac.public.v1" {
+		filterReservedMetadata(toReflect)
+	}
+	return nil
+}
+
+const reservedMetadataDomain = "admin.osac.openshift.io"
+
+func isReservedMetadataKey(key string) bool {
+	separator := strings.IndexByte(key, '/')
+	if separator < 0 {
+		return false
+	}
+	domain := key[:separator]
+	return domain == reservedMetadataDomain || strings.HasSuffix(domain, "."+reservedMetadataDomain)
+}
+
+func filterReservedMetadata(message protoreflect.Message) {
+	if !message.IsValid() {
+		return
+	}
+	if message.Descriptor().FullName() == "osac.public.v1.Metadata" {
+		for _, name := range []protoreflect.Name{"labels", "annotations"} {
+			field := message.Descriptor().Fields().ByName(name)
+			if field == nil || !message.Has(field) {
+				continue
+			}
+			values := message.Get(field).Map()
+			var reservedKeys []protoreflect.MapKey
+			values.Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
+				if isReservedMetadataKey(key.String()) {
+					reservedKeys = append(reservedKeys, key)
+				}
+				return true
+			})
+			for _, key := range reservedKeys {
+				values.Clear(key)
+			}
+		}
+	}
+
+	fields := message.Descriptor().Fields()
+	for i := range fields.Len() {
+		field := fields.Get(i)
+		if !message.Has(field) {
+			continue
+		}
+		if field.IsList() {
+			if field.Message() == nil {
+				continue
+			}
+			list := message.Get(field).List()
+			for j := range list.Len() {
+				filterReservedMetadata(list.Get(j).Message())
+			}
+			continue
+		}
+		if field.IsMap() {
+			if field.MapValue().Message() == nil {
+				continue
+			}
+			values := message.Get(field).Map()
+			values.Range(func(_ protoreflect.MapKey, value protoreflect.Value) bool {
+				filterReservedMetadata(value.Message())
+				return true
+			})
+			continue
+		}
+		if field.Message() != nil {
+			filterReservedMetadata(message.Get(field).Message())
+		}
+	}
 }
 
 func (m *GenericMapper[From, To]) copyMessage(from, to protoreflect.Message) error {
