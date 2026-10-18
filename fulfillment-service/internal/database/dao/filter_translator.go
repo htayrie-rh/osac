@@ -125,6 +125,9 @@ type filterTranslatorResult struct {
 	// mapIndexOperand is the SQL for the map operand, if this is a map index result.
 	mapIndexOperand string
 
+	// mapRawOperand is the unsanitized SQL for a metadata map, used by literal-key filters to keep the indexed column.
+	mapRawOperand string
+
 	// mapIndexKey is the map key, if this is a map index result.
 	mapIndexKey string
 
@@ -646,6 +649,10 @@ func (t *FilterTranslator) translateIndex(args []ast.Expr) (result filterTransla
 		err = fmt.Errorf("index must be a literal string")
 		return
 	}
+	mapOperand := targetTr.sql
+	if targetTr.mapRawOperand != "" {
+		mapOperand = targetTr.mapRawOperand
+	}
 	keyText, keyEscaped := t.translateString(keyValue, "")
 	var keySql string
 	if keyEscaped {
@@ -655,10 +662,10 @@ func (t *FilterTranslator) translateIndex(args []ast.Expr) (result filterTransla
 	}
 	switch targetTr.kind {
 	case filterTranslatorMapKind:
-		result.sql = fmt.Sprintf("%s->>%s", targetTr.sql, keySql)
+		result.sql = fmt.Sprintf("%s->>%s", mapOperand, keySql)
 		result.kind = filterTranslatorStringKind
 		result.precedence = filterTranslatorMaxPrecedence
-		result.mapIndexOperand = targetTr.sql
+		result.mapIndexOperand = mapOperand
 		result.mapIndexKey = keyValue
 	default:
 		err = fmt.Errorf("index of kind '%s' isn't supported", targetTr.kind)
@@ -847,9 +854,23 @@ func (t *FilterTranslator) translateInField(key ast.Expr, value ast.SelectExpr) 
 	var buffer bytes.Buffer
 	switch valueTr.kind {
 	case filterTranslatorMapKind:
-		buffer.WriteString(valueTr.sql)
+		mapOperand := valueTr.sql
+		// Keep literal membership checks on the indexed column when their key has
+		// already passed the public reserved-key validation. Dynamic keys must
+		// query the projected map, or a value from an ordinary key could be used
+		// to probe for the presence of a reserved key.
+		if valueTr.mapRawOperand != "" && (!t.isPublic || keyTr.hasStringValue) {
+			mapOperand = valueTr.mapRawOperand
+		}
+		buffer.WriteString(mapOperand)
 		buffer.WriteString(" ? ")
+		if !keyTr.hasStringValue {
+			buffer.WriteByte('(')
+		}
 		buffer.WriteString(keyTr.sql)
+		if !keyTr.hasStringValue {
+			buffer.WriteByte(')')
+		}
 		result.precedence = filterTranslatorOtherPrecedence
 	case filterTranslatorJsonArrayKind:
 		buffer.WriteString(valueTr.sql)
@@ -1035,13 +1056,17 @@ func (t *FilterTranslator) translateSelectThisMdField(fieldName string,
 			result.kind = filterTranslatorStringKind
 			result.precedence = filterTranslatorMaxPrecedence
 		}
-	case "labels":
+	case "labels", "annotations":
 		if testOnly {
 			result.sql = "true"
 			result.kind = filterTranslatorBooleanKind
 			result.precedence = filterTranslatorMaxPrecedence
 		} else {
 			result.sql = fieldName
+			result.mapRawOperand = fieldName
+			if t.isPublic {
+				result.sql = publicMetadataMapSQL(fieldName)
+			}
 			result.kind = filterTranslatorMapKind
 			result.precedence = filterTranslatorMaxPrecedence
 		}
@@ -1049,6 +1074,17 @@ func (t *FilterTranslator) translateSelectThisMdField(fieldName string,
 		err = fmt.Errorf("metadata doesn't have a '%s' field", fieldName)
 	}
 	return
+}
+
+func publicMetadataMapSQL(operand string) string {
+	return fmt.Sprintf(
+		`coalesce((select jsonb_object_agg(public_metadata.key, public_metadata.value) `+
+			`from jsonb_each(%s) as public_metadata(key, value) `+
+			`where position('/' in public_metadata.key) = 0 or `+
+			`(split_part(public_metadata.key, '/', 1) <> '%s' and `+
+			`split_part(public_metadata.key, '/', 1) not like '%%.%s')), '{}'::jsonb)`,
+		operand, reservedMetadataDomain, reservedMetadataDomain,
+	)
 }
 
 func (t *FilterTranslator) translateSelectJsonField(operandSql string, msgDesc protoreflect.MessageDescriptor,
