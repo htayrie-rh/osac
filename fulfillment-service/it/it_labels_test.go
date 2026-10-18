@@ -245,6 +245,8 @@ var _ = Describe("Labels", func() {
 		Expect(err).ToNot(HaveOccurred())
 		stalePublicObject := latestPublicResponse.GetObject()
 
+		// The cluster controller can advance the version between Get and Update. Keep this replacement unlocked so the
+		// test exercises metadata merging; the stale-object update below verifies Lock=true behavior.
 		updateResponse, err := clustersClient.Update(ctx, publicv1.ClustersUpdateRequest_builder{
 			Object: publicv1.Cluster_builder{
 				Id: object.GetId(),
@@ -258,7 +260,6 @@ var _ = Describe("Labels", func() {
 				}.Build(),
 			}.Build(),
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.labels"}},
-			Lock:       true,
 		}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(updateResponse.GetObject().GetMetadata().GetLabels()).To(Equal(map[string]string{
