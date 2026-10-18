@@ -488,6 +488,21 @@ var _ = Describe("Generic mapper", func() {
 		}))
 	})
 
+	It("does not add omitted metadata when there are no reserved values to restore", func() {
+		current := privatev1.Cluster_builder{
+			Metadata: privatev1.Metadata_builder{
+				Name:        "stored-cluster",
+				Labels:      map[string]string{"ordinary": "stored"},
+				Annotations: map[string]string{"ordinary": "stored"},
+			}.Build(),
+		}.Build()
+		candidate := privatev1.Cluster_builder{}.Build()
+
+		restoreReservedMetadata(current, candidate)
+
+		Expect(candidate.GetMetadata()).To(BeNil())
+	})
+
 	It("rejects reserved metadata on public input before copying", func() {
 		publicObject := publicv1.Cluster_builder{
 			Id: "input-cluster",

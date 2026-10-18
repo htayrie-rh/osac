@@ -169,6 +169,23 @@ func restoreReservedMetadata(current, candidate proto.Message) {
 		return
 	}
 	currentMetadata := currentMessage.Get(currentMetadataField).Message()
+	hasCurrentReservedMetadata := false
+	for _, name := range []protoreflect.Name{"labels", "annotations"} {
+		currentField := currentMetadata.Descriptor().Fields().ByName(name)
+		if currentField == nil || !currentField.IsMap() || currentField.MapValue().Kind() != protoreflect.StringKind {
+			continue
+		}
+		currentMetadata.Get(currentField).Map().Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
+			if isReservedMetadataKey(key.String()) {
+				hasCurrentReservedMetadata = true
+				return false
+			}
+			return true
+		})
+	}
+	if !candidateMessage.Has(candidateMetadataField) && !hasCurrentReservedMetadata {
+		return
+	}
 	candidateMetadata := candidateMessage.Mutable(candidateMetadataField).Message()
 	for _, name := range []protoreflect.Name{"labels", "annotations"} {
 		currentField := currentMetadata.Descriptor().Fields().ByName(name)
