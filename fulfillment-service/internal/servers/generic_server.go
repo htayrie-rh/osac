@@ -56,6 +56,12 @@ func isPublicAPIView(ctx context.Context) bool {
 	return isPublic
 }
 
+func restoreReservedMetadataForPublicAPIView(ctx context.Context, current, candidate proto.Message) {
+	if isPublicAPIView(ctx) {
+		restoreReservedMetadata(current, candidate)
+	}
+}
+
 // GenericServerBuilder contains the data and logic needed to create new generic servers.
 type GenericServerBuilder[O dao.Object] struct {
 	logger            *slog.Logger
@@ -754,9 +760,7 @@ func (s *GenericServer[O]) updateWithCandidatePreparation(
 	} else {
 		tmpObject = proto.Clone(requestObject).(O)
 	}
-	if isPublicAPIView(ctx) {
-		restoreReservedMetadata(currentObject, tmpObject)
-	}
+	restoreReservedMetadataForPublicAPIView(ctx, currentObject, tmpObject)
 
 	if !prepareBeforeValidation {
 		// Validate the merged object using protovalidate.
@@ -802,9 +806,7 @@ func (s *GenericServer[O]) updateWithCandidatePreparation(
 		if err = prepareCandidate(ctx, proto.Clone(currentObject).(O), tmpObject); err != nil {
 			return err
 		}
-		if isPublicAPIView(ctx) {
-			restoreReservedMetadata(currentObject, tmpObject)
-		}
+		restoreReservedMetadataForPublicAPIView(ctx, currentObject, tmpObject)
 		if err = s.validatePreparedCandidate(ctx, tmpObject, preparedID, preparedMetadata); err != nil {
 			return err
 		}
