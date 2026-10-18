@@ -420,7 +420,7 @@ var _ = Describe("Events server visibility", Ordered, func() {
 		watchCtx, cancel := context.WithCancel(context.Background())
 		DeferCleanup(cancel)
 		stream, err := client.Watch(watchCtx, publicv1.EventsWatchRequest_builder{
-			Filter: new("!('admin.osac.openshift.io/managed' in event.cluster.metadata.labels)"),
+			Filter: new("event.cluster.metadata.labels == {'ordinary': 'visible'}"),
 		}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		collector := &eventsCollector{}
@@ -442,12 +442,24 @@ var _ = Describe("Events server visibility", Ordered, func() {
 			}.Build(),
 		}.Build()
 		sendEvent(privateEvent)
+		changedPrivateEvent := proto.Clone(privateEvent).(*privatev1.Event)
+		changedPrivateEvent.SetId(uuid.New())
+		changedPrivateEvent.GetCluster().GetMetadata().SetLabels(map[string]string{
+			"admin.osac.openshift.io/managed": "changed",
+			"ordinary":                        "visible",
+		})
+		sendEvent(changedPrivateEvent)
 
-		Eventually(collector.Events, time.Second).Should(HaveLen(1))
-		publicLabels := collector.Events()[0].GetCluster().GetMetadata().GetLabels()
-		Expect(publicLabels).To(Equal(map[string]string{"ordinary": "visible"}))
+		Eventually(collector.Events, 5*time.Second).Should(HaveLen(2))
+		for _, publicEvent := range collector.Events() {
+			publicLabels := publicEvent.GetCluster().GetMetadata().GetLabels()
+			Expect(publicLabels).To(Equal(map[string]string{"ordinary": "visible"}))
+		}
 		Expect(privateEvent.GetCluster().GetMetadata().GetLabels()).To(HaveKeyWithValue(
 			"admin.osac.openshift.io/managed", "system",
+		))
+		Expect(changedPrivateEvent.GetCluster().GetMetadata().GetLabels()).To(HaveKeyWithValue(
+			"admin.osac.openshift.io/managed", "changed",
 		))
 	})
 
