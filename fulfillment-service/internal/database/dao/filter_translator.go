@@ -50,6 +50,7 @@ type FilterTranslator struct {
 	tsDesc    protoreflect.MessageDescriptor
 	thisDesc  protoreflect.MessageDescriptor
 	isProject bool
+	isPublic  bool
 	celEnv    *cel.Env
 }
 
@@ -237,6 +238,7 @@ func (b *FilterTranslatorBuilder) Build() (result *FilterTranslator, err error) 
 		tsDesc:    tsDesc,
 		thisDesc:  b.thisDesc,
 		isProject: isProject,
+		isPublic:  b.thisDesc.ParentFile().Package() == "osac.public.v1",
 		celEnv:    celEnv,
 	}
 	return
@@ -262,14 +264,19 @@ func (b *FilterTranslatorBuilder) createCelEnv() (result *cel.Env, err error) {
 
 // Translate translate the given filter expression into a SQL where statement.
 func (t *FilterTranslator) Translate(ctx context.Context, filter string) (sql string, err error) {
-	ast, issues := t.celEnv.Compile(filter)
+	tree, issues := t.celEnv.Compile(filter)
 	if issues != nil {
 		err = issues.Err()
 		if err != nil {
 			return
 		}
 	}
-	result, err := t.translate(ast.NativeRep().Expr())
+	expr := tree.NativeRep().Expr()
+	if t.isPublic && ContainsReservedMetadataReference(expr) {
+		err = errors.New("filter references reserved metadata key")
+		return
+	}
+	result, err := t.translate(expr)
 	if err != nil {
 		return
 	}
