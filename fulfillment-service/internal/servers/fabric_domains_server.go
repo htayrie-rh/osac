@@ -90,7 +90,10 @@ func (b *FabricDomainsServerBuilder) Build() (*FabricDomainsServer, error) {
 	}
 	delegate, err := NewPrivateFabricDomainsServer().
 		SetLogger(b.logger).SetAttributionLogic(b.attributionLogic).
-		SetTenancyLogic(b.tenancyLogic).SetMetricsRegisterer(b.metricsRegisterer).Build()
+		SetTenancyLogic(b.tenancyLogic).
+		SetMetricsRegisterer(b.metricsRegisterer).
+		SetFilterDesc((*publicv1.FabricDomain)(nil).ProtoReflect().Descriptor()).
+		Build()
 	if err != nil {
 		return nil, err
 	}

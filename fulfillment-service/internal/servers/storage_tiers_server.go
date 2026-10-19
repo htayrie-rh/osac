@@ -131,6 +131,7 @@ func (b *StorageTiersServerBuilder) Build() (result *StorageTiersServer, err err
 		SetTenancyLogic(b.tenancyLogic).
 		SetMetricsRegisterer(b.metricsRegisterer).
 		SetStorageBackendsDAO(b.storageBackendsDAO).
+		SetFilterDesc((*publicv1.StorageTier)(nil).ProtoReflect().Descriptor()).
 		Build()
 	if err != nil {
 		return
