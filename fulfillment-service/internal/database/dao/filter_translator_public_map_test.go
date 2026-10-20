@@ -56,6 +56,10 @@ var _ = Describe("Public metadata map translation", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(translated).To(Equal(`labels ? 'ordinary'`))
 
+		translated, err = publicTranslator.Translate(ctx, `this.metadata.labels['ordinary'] == 'visible'`)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(translated).To(Equal(`labels @> '{"ordinary":"visible"}'`))
+
 		translated, err = publicTranslator.Translate(ctx, `this.metadata.labels['probe'] in this.metadata.labels`)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(translated).To(ContainSubstring(`labels->>'probe'`))

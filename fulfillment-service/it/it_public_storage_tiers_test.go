@@ -151,7 +151,7 @@ var _ = Describe("Public storage tiers", func() {
 		Expect(ids).To(ContainElements(id1, id2))
 	})
 
-	It("rejects reserved-key filters and compares labels through the public view", func() {
+	It("rejects reserved-key filters and still supports ordinary label filters", func() {
 		id := createViaPrivate("reserved-filter", privatev1.StorageProtocol_STORAGE_PROTOCOL_NFS)
 		markerKey := "it.osac.io/filter-case"
 		markerValue := uuid.New()
@@ -178,7 +178,7 @@ var _ = Describe("Public storage tiers", func() {
 		Expect(ok).To(BeTrue())
 		Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
 
-		publicMapFilter := fmt.Sprintf("this.metadata.labels == {%q: %q}", markerKey, markerValue)
+		publicMapFilter := fmt.Sprintf("this.metadata.labels[%q] == %q", markerKey, markerValue)
 		response, err := publicClient.List(ctx, publicv1.StorageTiersListRequest_builder{
 			Filter: &publicMapFilter,
 		}.Build())
