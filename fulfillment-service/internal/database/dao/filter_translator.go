@@ -33,6 +33,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	metadatautil "github.com/osac-project/osac/fulfillment-service/internal/metadata"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
@@ -1083,7 +1084,7 @@ func publicMetadataMapSQL(operand string) string {
 			`where position('/' in public_metadata.key) = 0 or `+
 			`(split_part(public_metadata.key, '/', 1) <> '%s' and `+
 			`split_part(public_metadata.key, '/', 1) not like '%%.%s')), '{}'::jsonb)`,
-		operand, reservedMetadataDomain, reservedMetadataDomain,
+		operand, metadatautil.ReservedMetadataDomain, metadatautil.ReservedMetadataDomain,
 	)
 }
 

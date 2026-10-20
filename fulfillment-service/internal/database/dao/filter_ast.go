@@ -14,13 +14,11 @@ specific language governing permissions and limitations under the License.
 package dao
 
 import (
-	"strings"
-
 	"github.com/google/cel-go/common/ast"
 	"github.com/google/cel-go/common/operators"
-)
 
-const reservedMetadataDomain = "admin.osac.openshift.io"
+	metadatautil "github.com/osac-project/osac/fulfillment-service/internal/metadata"
+)
 
 // ContainsReservedMetadataReference reports whether expr explicitly indexes or tests membership of a reserved key in
 // metadata.labels or metadata.annotations. It walks the complete expression tree so a nested or mixed predicate cannot
@@ -105,8 +103,7 @@ func hasReservedMetadataLiteral(expr ast.Expr) bool {
 	if !ok {
 		return false
 	}
-	domain, _, hasSlash := strings.Cut(key, "/")
-	return hasSlash && (domain == reservedMetadataDomain || strings.HasSuffix(domain, "."+reservedMetadataDomain))
+	return metadatautil.IsReservedMetadataKey(key)
 }
 
 func isMetadataMap(expr ast.Expr) bool {
