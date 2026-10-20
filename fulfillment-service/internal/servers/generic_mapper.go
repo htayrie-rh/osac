@@ -204,25 +204,13 @@ func restoreReservedMetadata(current, candidate proto.Message) {
 	}
 }
 
-func validatePublicMetadata(message protoreflect.Message) error {
+func walkPublicMetadata(message protoreflect.Message, visit func(protoreflect.Message) error) error {
 	if !message.IsValid() {
 		return nil
 	}
 	if message.Descriptor().FullName() == "osac.public.v1.Metadata" {
-		for _, name := range []protoreflect.Name{"labels", "annotations"} {
-			field := message.Descriptor().Fields().ByName(name)
-			if field == nil || !message.Has(field) {
-				continue
-			}
-			values := message.Get(field).Map()
-			reserved := false
-			values.Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
-				reserved = metadatautil.IsReservedMetadataKey(key.String())
-				return !reserved
-			})
-			if reserved {
-				return grpcstatus.Error(grpccodes.InvalidArgument, reservedMetadataError)
-			}
+		if err := visit(message); err != nil {
+			return err
 		}
 	}
 
@@ -238,7 +226,7 @@ func validatePublicMetadata(message protoreflect.Message) error {
 			}
 			list := message.Get(field).List()
 			for j := range list.Len() {
-				if err := validatePublicMetadata(list.Get(j).Message()); err != nil {
+				if err := walkPublicMetadata(list.Get(j).Message(), visit); err != nil {
 					return err
 				}
 			}
@@ -250,7 +238,7 @@ func validatePublicMetadata(message protoreflect.Message) error {
 			}
 			var validationErr error
 			message.Get(field).Map().Range(func(_ protoreflect.MapKey, value protoreflect.Value) bool {
-				validationErr = validatePublicMetadata(value.Message())
+				validationErr = walkPublicMetadata(value.Message(), visit)
 				return validationErr == nil
 			})
 			if validationErr != nil {
@@ -259,12 +247,32 @@ func validatePublicMetadata(message protoreflect.Message) error {
 			continue
 		}
 		if field.Message() != nil {
-			if err := validatePublicMetadata(message.Get(field).Message()); err != nil {
+			if err := walkPublicMetadata(message.Get(field).Message(), visit); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func validatePublicMetadata(message protoreflect.Message) error {
+	return walkPublicMetadata(message, func(metadata protoreflect.Message) error {
+		for _, name := range []protoreflect.Name{"labels", "annotations"} {
+			field := metadata.Descriptor().Fields().ByName(name)
+			if field == nil || !metadata.Has(field) {
+				continue
+			}
+			reserved := false
+			metadata.Get(field).Map().Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
+				reserved = metadatautil.IsReservedMetadataKey(key.String())
+				return !reserved
+			})
+			if reserved {
+				return grpcstatus.Error(grpccodes.InvalidArgument, reservedMetadataError)
+			}
+		}
+		return nil
+	})
 }
 
 func validatePublicObjectMetadata(object proto.Message) error {
@@ -286,16 +294,13 @@ func publicInputMappingError(err error, message string) error {
 }
 
 func filterReservedMetadata(message protoreflect.Message) {
-	if !message.IsValid() {
-		return
-	}
-	if message.Descriptor().FullName() == "osac.public.v1.Metadata" {
+	_ = walkPublicMetadata(message, func(metadata protoreflect.Message) error {
 		for _, name := range []protoreflect.Name{"labels", "annotations"} {
-			field := message.Descriptor().Fields().ByName(name)
-			if field == nil || !message.Has(field) {
+			field := metadata.Descriptor().Fields().ByName(name)
+			if field == nil || !metadata.Has(field) {
 				continue
 			}
-			values := message.Get(field).Map()
+			values := metadata.Get(field).Map()
 			var reservedKeys []protoreflect.MapKey
 			values.Range(func(key protoreflect.MapKey, _ protoreflect.Value) bool {
 				if metadatautil.IsReservedMetadataKey(key.String()) {
@@ -307,39 +312,8 @@ func filterReservedMetadata(message protoreflect.Message) {
 				values.Clear(key)
 			}
 		}
-	}
-
-	fields := message.Descriptor().Fields()
-	for i := range fields.Len() {
-		field := fields.Get(i)
-		if !message.Has(field) {
-			continue
-		}
-		if field.IsList() {
-			if field.Message() == nil {
-				continue
-			}
-			list := message.Get(field).List()
-			for j := range list.Len() {
-				filterReservedMetadata(list.Get(j).Message())
-			}
-			continue
-		}
-		if field.IsMap() {
-			if field.MapValue().Message() == nil {
-				continue
-			}
-			values := message.Get(field).Map()
-			values.Range(func(_ protoreflect.MapKey, value protoreflect.Value) bool {
-				filterReservedMetadata(value.Message())
-				return true
-			})
-			continue
-		}
-		if field.Message() != nil {
-			filterReservedMetadata(message.Get(field).Message())
-		}
-	}
+		return nil
+	})
 }
 
 func (m *GenericMapper[From, To]) copyMessage(from, to protoreflect.Message) error {
