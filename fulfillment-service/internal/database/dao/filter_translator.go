@@ -1066,7 +1066,14 @@ func (t *FilterTranslator) translateSelectThisMdField(fieldName string,
 			result.sql = fieldName
 			result.mapRawOperand = fieldName
 			if t.isPublic {
-				result.sql = publicMetadataMapSQL(fieldName)
+				operand := publicMetadataLabelsOperand
+				if fieldName == "annotations" {
+					operand = publicMetadataAnnotationsOperand
+				}
+				result.sql, err = publicMetadataMapSQL(operand)
+				if err != nil {
+					return
+				}
 			}
 			result.kind = filterTranslatorMapKind
 			result.precedence = filterTranslatorMaxPrecedence
@@ -1077,15 +1084,32 @@ func (t *FilterTranslator) translateSelectThisMdField(fieldName string,
 	return
 }
 
-func publicMetadataMapSQL(operand string) string {
+type publicMetadataMapOperand uint8
+
+const (
+	publicMetadataLabelsOperand publicMetadataMapOperand = iota
+	publicMetadataAnnotationsOperand
+)
+
+func publicMetadataMapSQL(operand publicMetadataMapOperand) (string, error) {
+	var operandSQL string
+	switch operand {
+	case publicMetadataLabelsOperand:
+		operandSQL = "labels"
+	case publicMetadataAnnotationsOperand:
+		operandSQL = "annotations"
+	default:
+		return "", fmt.Errorf("unsupported public metadata map operand %d", operand)
+	}
+
 	return fmt.Sprintf(
 		`coalesce((select jsonb_object_agg(public_metadata.key, public_metadata.value) `+
 			`from jsonb_each(%s) as public_metadata(key, value) `+
 			`where position('/' in public_metadata.key) = 0 or `+
 			`(split_part(public_metadata.key, '/', 1) <> '%s' and `+
 			`split_part(public_metadata.key, '/', 1) not like '%%.%s')), '{}'::jsonb)`,
-		operand, metadatautil.ReservedMetadataDomain, metadatautil.ReservedMetadataDomain,
-	)
+		operandSQL, metadatautil.ReservedMetadataDomain, metadatautil.ReservedMetadataDomain,
+	), nil
 }
 
 func (t *FilterTranslator) translateSelectJsonField(operandSql string, msgDesc protoreflect.MessageDescriptor,

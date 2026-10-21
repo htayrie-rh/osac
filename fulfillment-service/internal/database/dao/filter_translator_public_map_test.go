@@ -74,4 +74,9 @@ var _ = Describe("Public metadata map translation", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(translated).To(Equal(`labels = annotations`))
 	})
+
+	It("rejects unsupported public map operands", func() {
+		_, err := publicMetadataMapSQL(publicMetadataMapOperand(255))
+		Expect(err).To(MatchError("unsupported public metadata map operand 255"))
+	})
 })
