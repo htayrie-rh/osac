@@ -421,6 +421,7 @@ endif
 		--namespace $(NS) --create-namespace \
 		--set osacNamespace=$(NS) \
 		--set kindClusterName=$(KIND_CLUSTER_NAME) \
+		--set ui.enabled=true \
 		--post-renderer $(DEV_FULL_HELM_POST_RENDERER) \
 		$(DEVSTACK_HELM_APPLY_ARGS) \
 		--wait --timeout 30m
@@ -478,7 +479,8 @@ ifeq ($(PROFILE),dev-full)
 	helm template osac-devstack charts/osac-devstack \
 		--namespace $(NS) \
 		--set osacNamespace=$(NS) \
-		--set kindClusterName=$(KIND_CLUSTER_NAME)
+		--set kindClusterName=$(KIND_CLUSTER_NAME) \
+		--set ui.enabled=true
 endif
 
 .PHONY: uninstall
