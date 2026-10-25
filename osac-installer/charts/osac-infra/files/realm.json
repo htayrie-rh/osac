@@ -810,6 +810,12 @@
       "roles": [
         "offline_access"
       ]
+    },
+    {
+      "client": "osac-csi-driver",
+      "roles": [
+        "osac-csi-driver"
+      ]
     }
   ],
   "clientScopeMappings": {

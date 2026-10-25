@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	. "github.com/onsi/ginkgo/v2/dsl/core"
 	. "github.com/onsi/gomega"
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -30,6 +32,7 @@ import (
 	"github.com/osac-project/osac/fulfillment-service/internal/uuid"
 	osacv1alpha1 "github.com/osac-project/osac/osac-operator/api/v1alpha1"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
+	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
 
 var _ = Describe("Volume lifecycle", func() {
@@ -274,6 +277,123 @@ var _ = Describe("Volume lifecycle", func() {
 			)).To(Succeed())
 			g.Expect(crList.Items).To(BeEmpty())
 		}, time.Minute, time.Second).Should(Succeed())
+	})
+
+	It("preserves Volume metadata through the CSI service account allowlist", func(ctx SpecContext) {
+		tokenSource, err := tool.makeCSITokenSource(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		accessToken, err := tokenSource.Token(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		claims := jwt.MapClaims{}
+		parsedToken, _, err := jwt.NewParser().ParseUnverified(accessToken.Access, claims)
+		Expect(err).NotTo(HaveOccurred())
+		realmAccess, ok := parsedToken.Claims.(jwt.MapClaims)["realm_access"].(map[string]any)
+		Expect(ok).To(BeTrue(), "CSI service-account token must include realm_access")
+		roles, ok := realmAccess["roles"].([]any)
+		Expect(ok).To(BeTrue(), "CSI service-account token must include realm_access.roles")
+		Expect(roles).To(ContainElement("osac-csi-driver"), "CSI token must carry its authorization role")
+		csiConn, err := tool.makeGrpcConn(internalServiceAddr, tokenSource)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { Expect(csiConn.Close()).To(Succeed()) })
+		csiVolumes := privatev1.NewVolumesClient(csiConn)
+		adminVolumes := privatev1.NewVolumesClient(tool.InternalView().AdminConn())
+
+		projects := privatev1.NewProjectsClient(tool.InternalView().AdminConn())
+		projectName := fmt.Sprintf("test-csi-volume-project-%s", uuid.New()[24:32])
+		project, err := projects.Create(ctx, privatev1.ProjectsCreateRequest_builder{
+			Object: privatev1.Project_builder{
+				Metadata: privatev1.Metadata_builder{Name: projectName, Tenant: testTenant}.Build(),
+				Spec:     privatev1.ProjectSpec_builder{Title: "CSI metadata integration project"}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func(cleanupCtx SpecContext) {
+			_, deleteErr := projects.Delete(cleanupCtx, privatev1.ProjectsDeleteRequest_builder{
+				Id: project.GetObject().GetId(),
+			}.Build())
+			Expect(deleteErr).NotTo(HaveOccurred())
+		})
+
+		volumeName := fmt.Sprintf("test-csi-metadata-volume-%s", uuid.New()[24:32])
+		created, err := csiVolumes.Create(ctx, privatev1.VolumesCreateRequest_builder{
+			Object: privatev1.Volume_builder{
+				Metadata: privatev1.Metadata_builder{
+					Name:    volumeName,
+					Tenant:  testTenant,
+					Project: projectName,
+					Labels: map[string]string{
+						metadataPrivateLabelKey:  "csi-stored-label",
+						metadataOrdinaryLabelKey: "csi-visible-label",
+					},
+					Annotations: map[string]string{
+						metadataPrivateAnnotationKey:  "csi-stored-annotation",
+						metadataOrdinaryAnnotationKey: "csi-visible-annotation",
+					},
+				}.Build(),
+				Spec: privatev1.VolumeSpec_builder{
+					StorageTier: tierName,
+					SizeGib:     10,
+					AccessMode:  privatev1.VolumeAccessMode_VOLUME_ACCESS_MODE_READ_WRITE_ONCE,
+				}.Build(),
+			}.Build(),
+		}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		volumeID := created.GetObject().GetId()
+		Expect(volumeID).NotTo(BeEmpty())
+		deleted := false
+		DeferCleanup(func(cleanupCtx SpecContext) {
+			if deleted {
+				return
+			}
+			_, deleteErr := adminVolumes.Delete(cleanupCtx, privatev1.VolumesDeleteRequest_builder{
+				Id: volumeID,
+			}.Build())
+			Expect(deleteErr).NotTo(HaveOccurred())
+		})
+
+		beforeResponse, err := adminVolumes.Get(ctx, privatev1.VolumesGetRequest_builder{Id: volumeID}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		before := beforeResponse.GetObject()
+		Expect(before.GetMetadata().GetLabels()).To(HaveKeyWithValue(metadataPrivateLabelKey, "csi-stored-label"))
+		Expect(before.GetMetadata().GetLabels()).To(HaveKeyWithValue(metadataOrdinaryLabelKey, "csi-visible-label"))
+		Expect(before.GetMetadata().GetAnnotations()).To(HaveKeyWithValue(metadataPrivateAnnotationKey, "csi-stored-annotation"))
+		Expect(before.GetMetadata().GetAnnotations()).To(HaveKeyWithValue(metadataOrdinaryAnnotationKey, "csi-visible-annotation"))
+
+		csiRead, err := csiVolumes.Get(ctx, privatev1.VolumesGetRequest_builder{Id: volumeID}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(metadataMapsEqual(csiRead.GetObject().GetMetadata().GetLabels(), before.GetMetadata().GetLabels())).To(BeTrue())
+		Expect(metadataMapsEqual(csiRead.GetObject().GetMetadata().GetAnnotations(), before.GetMetadata().GetAnnotations())).To(BeTrue())
+
+		filter := fmt.Sprintf("this.id == %q && this.metadata.labels[%q] == %q",
+			volumeID, metadataPrivateLabelKey, "csi-stored-label")
+		listed, err := csiVolumes.List(ctx, privatev1.VolumesListRequest_builder{Filter: &filter}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(listed.GetTotal()).To(Equal(int32(1)))
+		Expect(listed.GetItems()).To(HaveLen(1))
+		Expect(metadataMapsEqual(listed.GetItems()[0].GetMetadata().GetLabels(), before.GetMetadata().GetLabels())).To(BeTrue())
+		Expect(metadataMapsEqual(listed.GetItems()[0].GetMetadata().GetAnnotations(), before.GetMetadata().GetAnnotations())).To(BeTrue())
+
+		updateAttempt := proto.Clone(before).(*privatev1.Volume)
+		updateAttempt.GetMetadata().SetLabels(map[string]string{metadataPrivateLabelKey: "must-not-change"})
+		_, err = csiVolumes.Update(ctx, privatev1.VolumesUpdateRequest_builder{Object: updateAttempt}.Build())
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+		_, err = csiVolumes.Signal(ctx, privatev1.VolumesSignalRequest_builder{Id: volumeID}.Build())
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+		_, err = privatev1.NewHubsClient(csiConn).Create(ctx, &privatev1.HubsCreateRequest{})
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+		_, err = privatev1.NewStorageBackendsClient(csiConn).Create(ctx, &privatev1.StorageBackendsCreateRequest{})
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+		_, err = publicv1.NewVolumesClient(csiConn).Get(ctx, publicv1.VolumesGetRequest_builder{Id: volumeID}.Build())
+		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.PermissionDenied))
+
+		afterResponse, err := adminVolumes.Get(ctx, privatev1.VolumesGetRequest_builder{Id: volumeID}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(metadataMapsEqual(before.GetMetadata().GetLabels(), afterResponse.GetObject().GetMetadata().GetLabels())).To(BeTrue())
+		Expect(metadataMapsEqual(before.GetMetadata().GetAnnotations(), afterResponse.GetObject().GetMetadata().GetAnnotations())).To(BeTrue())
+
+		_, err = csiVolumes.Delete(ctx, privatev1.VolumesDeleteRequest_builder{Id: volumeID}.Build())
+		Expect(err).NotTo(HaveOccurred())
+		deleted = true
 	})
 
 	// =========================================================================

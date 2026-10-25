@@ -20,12 +20,16 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
@@ -69,6 +73,233 @@ func TestDiscoverMetadataMethodCapabilities(t *testing.T) {
 	}
 }
 
+func TestMetadataResourceServiceMatrix(t *testing.T) {
+	if len(metadataResourceServiceNames) != 26 {
+		t.Fatalf("persistent metadata service matrix contains %d resources, want 26", len(metadataResourceServiceNames))
+	}
+	seen := make(map[string]struct{}, len(metadataResourceServiceNames))
+	for _, name := range metadataResourceServiceNames {
+		if _, exists := seen[name]; exists {
+			t.Errorf("metadata service %q appears more than once", name)
+			continue
+		}
+		seen[name] = struct{}{}
+
+		services, err := metadataServices(name)
+		if err != nil {
+			t.Errorf("metadataServices(%q): %v", name, err)
+			continue
+		}
+		if !serviceHasMetadataMethod(services.private, "Get") || !serviceHasMetadataMethod(services.private, "Update") {
+			t.Errorf("private %s service must expose Get and Update", name)
+			continue
+		}
+		getObject := services.private.Methods().ByName("Get").Output().Fields().ByName("object")
+		if getObject == nil || getObject.Message() == nil {
+			t.Errorf("private %s Get response has no object", name)
+			continue
+		}
+		metadata := getObject.Message().Fields().ByName("metadata")
+		if metadata == nil || metadata.Message() == nil {
+			t.Errorf("private %s object has no metadata field", name)
+			continue
+		}
+		metadataDescriptor := metadata.Message()
+		for _, mapName := range []protoreflect.Name{"labels", "annotations"} {
+			mapField := metadataDescriptor.Fields().ByName(mapName)
+			if mapField == nil || !mapField.IsMap() || mapField.MapKey().Kind() != protoreflect.StringKind || mapField.MapValue().Kind() != protoreflect.StringKind {
+				t.Errorf("private %s metadata.%s is not a string map", name, mapName)
+			}
+		}
+
+		updateObject := services.private.Methods().ByName("Update").Input().Fields().ByName("object")
+		if updateObject == nil || updateObject.Message() == nil || updateObject.Message().FullName() != getObject.Message().FullName() {
+			t.Errorf("private %s Update object does not match its Get object", name)
+		}
+
+		if name == "Hubs" || name == "StorageBackends" {
+			if services.public != nil {
+				t.Errorf("%s must remain private-only", name)
+			}
+		} else {
+			if services.public == nil {
+				t.Errorf("%s has no public service descriptor", name)
+				continue
+			}
+			publicGet := services.public.Methods().ByName("Get")
+			if publicGet == nil {
+				t.Errorf("public %s service has no Get method", name)
+				continue
+			}
+			publicObject := publicGet.Output().Fields().ByName("object")
+			if publicObject == nil || publicObject.Message() == nil {
+				t.Errorf("public %s Get response has no metadata object", name)
+				continue
+			}
+			publicMetadata := publicObject.Message().Fields().ByName("metadata")
+			if publicMetadata == nil || publicMetadata.Message() == nil {
+				t.Errorf("public %s Get object has no metadata message", name)
+				continue
+			}
+			if publicCreate := services.public.Methods().ByName("Create"); publicCreate != nil &&
+				serviceHasMetadataMethod(services.private, "List") && serviceHasMetadataMethod(services.private, "Delete") {
+				createObject := publicCreate.Input().Fields().ByName("object")
+				if createObject == nil || createObject.Message() == nil {
+					t.Errorf("public %s Create request has no object", name)
+				} else if createObject.Message().FullName() != publicObject.Message().FullName() {
+					t.Errorf("public %s Create object does not match its Get object", name)
+				}
+			}
+			for _, mapName := range []protoreflect.Name{"labels", "annotations"} {
+				mapField := publicMetadata.Message().Fields().ByName(mapName)
+				if mapField == nil || !mapField.IsMap() || mapField.MapKey().Kind() != protoreflect.StringKind || mapField.MapValue().Kind() != protoreflect.StringKind {
+					t.Errorf("public %s metadata.%s is not a string map", name, mapName)
+				}
+			}
+			if publicUpdate := services.public.Methods().ByName("Update"); publicUpdate != nil {
+				updateObject := publicUpdate.Input().Fields().ByName("object")
+				if updateObject == nil || updateObject.Message() == nil {
+					t.Errorf("public %s Update request has no object", name)
+				} else {
+					if updateObject.Message().FullName() != publicObject.Message().FullName() {
+						t.Errorf("public %s Update object does not match its Get object", name)
+					}
+					updateMetadata := updateObject.Message().Fields().ByName("metadata")
+					if updateMetadata == nil || updateMetadata.Message() == nil {
+						t.Errorf("public %s Update object has no metadata field", name)
+					}
+				}
+				mask := publicUpdate.Input().Fields().ByName("update_mask")
+				if mask == nil || mask.Message() == nil {
+					t.Errorf("public %s Update request has no field mask", name)
+				} else {
+					paths := mask.Message().Fields().ByName("paths")
+					if paths == nil || !paths.IsList() || paths.Kind() != protoreflect.StringKind {
+						t.Errorf("public %s Update field mask has no string paths", name)
+					}
+				}
+			}
+		}
+	}
+	if len(seen) != 26 {
+		t.Fatalf("unique persistent metadata services = %d, want 26", len(seen))
+	}
+}
+
+func TestMetadataMapValuesReplacesOnlyRequestedMap(t *testing.T) {
+	metadata := privatev1.Metadata_builder{
+		Labels:      map[string]string{"old-label": "old"},
+		Annotations: map[string]string{"old-annotation": "old"},
+	}.Build()
+	if err := replaceMetadataMap(metadata.ProtoReflect(), "labels", map[string]string{"new-label": "new"}); err != nil {
+		t.Fatalf("replaceMetadataMap(labels): %v", err)
+	}
+	object := privatev1.ComputeInstance_builder{Metadata: metadata}.Build()
+	gotLabels, err := metadataMapValues(object.ProtoReflect(), "labels")
+	if err != nil {
+		t.Fatalf("metadataMapValues(labels): %v", err)
+	}
+	gotAnnotations, err := metadataMapValues(object.ProtoReflect(), "annotations")
+	if err != nil {
+		t.Fatalf("metadataMapValues(annotations): %v", err)
+	}
+	if !reflect.DeepEqual(gotLabels, map[string]string{"new-label": "new"}) {
+		t.Fatalf("labels after replacement = %v, want only new-label=new", gotLabels)
+	}
+	if !reflect.DeepEqual(gotAnnotations, map[string]string{"old-annotation": "old"}) {
+		t.Fatalf("annotations changed while replacing labels: %v", gotAnnotations)
+	}
+	if metadataMapsEqual(map[string]string{"left": ""}, map[string]string{"right": ""}) {
+		t.Fatal("maps with different keys and empty values must not compare equal")
+	}
+}
+
+func TestPublicMetadataCreateObjectSanitizesOutputFields(t *testing.T) {
+	services, err := metadataServices("ComputeInstances")
+	if err != nil {
+		t.Fatalf("metadataServices(ComputeInstances): %v", err)
+	}
+	getMethod := services.public.Methods().ByName("Get")
+	if getMethod == nil {
+		t.Fatal("public ComputeInstances Get method is missing")
+	}
+	objectField := getMethod.Output().Fields().ByName("object")
+	if objectField == nil || objectField.Message() == nil {
+		t.Fatal("public ComputeInstances Get response has no object")
+	}
+	objectDescriptor := objectField.Message()
+	existing := dynamicpb.NewMessage(objectDescriptor)
+	objectFields := objectDescriptor.Fields()
+	idField := objectFields.ByName("id")
+	statusField := objectFields.ByName("status")
+	metadataField := objectFields.ByName("metadata")
+	if idField == nil || statusField == nil || metadataField == nil || metadataField.Message() == nil {
+		t.Fatal("public ComputeInstance descriptor is missing output or metadata fields")
+	}
+	existing.Set(idField, protoreflect.ValueOfString("existing-id"))
+	existing.Set(statusField, protoreflect.ValueOfMessage(dynamicpb.NewMessage(statusField.Message())))
+	metadata := existing.Mutable(metadataField).Message()
+	metadataFields := metadata.Descriptor().Fields()
+	for _, fieldName := range []protoreflect.Name{"name", "tenant", "project", "creator"} {
+		field := metadataFields.ByName(fieldName)
+		if field == nil || field.Kind() != protoreflect.StringKind {
+			t.Fatalf("metadata field %q is missing or not a string", fieldName)
+		}
+		metadata.Set(field, protoreflect.ValueOfString("original-"+string(fieldName)))
+	}
+	versionField := metadataFields.ByName("version")
+	if versionField == nil || versionField.Kind() != protoreflect.Int32Kind {
+		t.Fatal("metadata version field is missing or not int32")
+	}
+	metadata.Set(versionField, protoreflect.ValueOfInt32(7))
+	for _, fieldName := range []protoreflect.Name{"creation_timestamp", "deletion_timestamp"} {
+		field := metadataFields.ByName(fieldName)
+		if field == nil || field.Kind() != protoreflect.MessageKind {
+			t.Fatalf("metadata field %q is missing or not a message", fieldName)
+		}
+		metadata.Set(field, protoreflect.ValueOfMessage(dynamicpb.NewMessage(field.Message())))
+	}
+	if err := replaceMetadataMap(metadata, "labels", map[string]string{"old": "label"}); err != nil {
+		t.Fatalf("replaceMetadataMap(labels): %v", err)
+	}
+	if err := replaceMetadataMap(metadata, "annotations", map[string]string{"old": "annotation"}); err != nil {
+		t.Fatalf("replaceMetadataMap(annotations): %v", err)
+	}
+
+	created, err := publicMetadataCreateObject(existing, "new-name", map[string]string{"new": "label"}, map[string]string{"new": "annotation"})
+	if err != nil {
+		t.Fatalf("publicMetadataCreateObject(): %v", err)
+	}
+	if created.Has(idField) || created.Has(statusField) {
+		t.Fatal("create object retained root output fields")
+	}
+	createdMetadata := created.Get(metadataField).Message()
+	for _, fieldName := range []protoreflect.Name{"creation_timestamp", "deletion_timestamp", "creator", "version"} {
+		if field := createdMetadata.Descriptor().Fields().ByName(fieldName); field == nil || createdMetadata.Has(field) {
+			t.Errorf("create object retained metadata output field %q", fieldName)
+		}
+	}
+	if got := createdMetadata.Get(metadataFields.ByName("name")).String(); got != "new-name" {
+		t.Errorf("metadata.name = %q, want new-name", got)
+	}
+	for _, fieldName := range []protoreflect.Name{"tenant", "project"} {
+		if got, want := createdMetadata.Get(metadataFields.ByName(fieldName)).String(), "original-"+string(fieldName); got != want {
+			t.Errorf("metadata.%s = %q, want %q", fieldName, got, want)
+		}
+	}
+	for fieldName, want := range map[protoreflect.Name]map[string]string{
+		"labels":      {"new": "label"},
+		"annotations": {"new": "annotation"},
+	} {
+		got, mapErr := metadataMapValues(created.ProtoReflect(), fieldName)
+		if mapErr != nil {
+			t.Errorf("metadataMapValues(%s): %v", fieldName, mapErr)
+		} else if !metadataMapsEqual(got, want) {
+			t.Errorf("metadata.%s = %v, want %v", fieldName, got, want)
+		}
+	}
+}
+
 func TestMetadataAccountsFromToolKeepsExistingIdentityViews(t *testing.T) {
 	adminConn := &grpc.ClientConn{}
 	tool := &Tool{internalView: &ToolView{adminConn: adminConn}}
@@ -92,10 +323,15 @@ func TestMetadataAccountsFromToolKeepsExistingIdentityViews(t *testing.T) {
 
 type fakeComputeInstanceMetadataClient struct {
 	object            *privatev1.ComputeInstance
+	getObjects        []*privatev1.ComputeInstance
+	getCalls          int
 	getErr            error
 	getNilResponse    bool
 	getNilObject      bool
 	updateErr         error
+	updateErrors      []error
+	updateCalls       int
+	updateRequests    []*privatev1.ComputeInstancesUpdateRequest
 	updateNilResponse bool
 	updateNilObject   bool
 	updateRequest     *privatev1.ComputeInstancesUpdateRequest
@@ -116,8 +352,13 @@ func (f *fakeComputeInstanceMetadataClient) Get(
 	if f.getNilObject {
 		return privatev1.ComputeInstancesGetResponse_builder{}.Build(), nil
 	}
+	object := f.object
+	if f.getCalls < len(f.getObjects) {
+		object = f.getObjects[f.getCalls]
+	}
+	f.getCalls++
 	return privatev1.ComputeInstancesGetResponse_builder{
-		Object: proto.Clone(f.object).(*privatev1.ComputeInstance),
+		Object: proto.Clone(object).(*privatev1.ComputeInstance),
 	}.Build(), nil
 }
 
@@ -127,6 +368,13 @@ func (f *fakeComputeInstanceMetadataClient) Update(
 	_ ...grpc.CallOption,
 ) (*privatev1.ComputeInstancesUpdateResponse, error) {
 	f.updateRequest = proto.Clone(request).(*privatev1.ComputeInstancesUpdateRequest)
+	f.updateRequests = append(f.updateRequests, f.updateRequest)
+	if f.updateCalls < len(f.updateErrors) {
+		err := f.updateErrors[f.updateCalls]
+		f.updateCalls++
+		return nil, err
+	}
+	f.updateCalls++
 	if f.updateErr != nil {
 		return nil, f.updateErr
 	}
@@ -143,6 +391,40 @@ func (f *fakeComputeInstanceMetadataClient) Update(
 	}
 	f.object = proto.Clone(request.GetObject()).(*privatev1.ComputeInstance)
 	return privatev1.ComputeInstancesUpdateResponse_builder{Object: proto.Clone(f.object).(*privatev1.ComputeInstance)}.Build(), nil
+}
+
+func TestComputeInstanceMetadataFixtureUpdateMetadataRefreshesAfterVersionConflict(t *testing.T) {
+	stale := privatev1.ComputeInstance_builder{
+		Id:       "instance-123",
+		Metadata: privatev1.Metadata_builder{Version: 7, Labels: map[string]string{"example.com/existing": "kept"}}.Build(),
+	}.Build()
+	current := proto.Clone(stale).(*privatev1.ComputeInstance)
+	current.GetMetadata().SetVersion(8)
+	client := &fakeComputeInstanceMetadataClient{
+		object:     current,
+		getObjects: []*privatev1.ComputeInstance{stale, current},
+		updateErrors: []error{
+			grpcstatus.Error(codes.Aborted, "object has been modified"),
+		},
+	}
+	fixture := &computeInstanceMetadataFixture{id: stale.GetId(), client: client}
+
+	updated, err := fixture.updateMetadata(context.Background(), map[string]string{"example.com/new": "value"}, nil)
+	if err != nil {
+		t.Fatalf("updateMetadata() error = %v", err)
+	}
+	if client.updateCalls != 2 {
+		t.Fatalf("Update calls = %d, want 2 after one version conflict", client.updateCalls)
+	}
+	if got := client.updateRequests[0].GetObject().GetMetadata().GetVersion(); got != 7 {
+		t.Errorf("first requested version = %d, want stale version 7", got)
+	}
+	if got := client.updateRequests[1].GetObject().GetMetadata().GetVersion(); got != 8 {
+		t.Errorf("retried requested version = %d, want refreshed version 8", got)
+	}
+	if got := updated.GetMetadata().GetLabels(); got["example.com/existing"] != "kept" || got["example.com/new"] != "value" {
+		t.Errorf("updated labels = %v, want existing and new labels", got)
+	}
 }
 
 func TestComputeInstanceMetadataFixturePrivateSnapshotReturnsCompleteCopy(t *testing.T) {
