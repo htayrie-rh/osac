@@ -32,47 +32,11 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/osac-project/osac/fulfillment-service/internal/auth"
-	"github.com/osac-project/osac/fulfillment-service/internal/oauth"
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
-
-const metadataCSIClientID = "osac-csi-driver"
-
-func (t *Tool) makeCSITokenSource(ctx context.Context) (auth.TokenSource, error) {
-	if t.kubeClient == nil {
-		return nil, fmt.Errorf("kubernetes client is required for CSI credentials")
-	}
-
-	credentials := &corev1.Secret{}
-	if err := t.kubeClient.Get(ctx, crclient.ObjectKey{Namespace: "keycloak", Name: "keycloak-client-secrets"}, credentials); err != nil {
-		return nil, fmt.Errorf("get Keycloak client credentials: %w", err)
-	}
-	clientSecret := credentials.Data[metadataCSIClientID]
-	if len(clientSecret) == 0 {
-		return nil, fmt.Errorf("keycloak client credentials do not contain the CSI driver secret")
-	}
-
-	store, err := auth.NewMemoryTokenStore().SetLogger(t.logger).Build()
-	if err != nil {
-		return nil, err
-	}
-	return oauth.NewTokenSource().
-		SetLogger(t.logger).
-		SetStore(store).
-		SetCaPool(t.caPool).
-		SetIssuer(fmt.Sprintf("https://%s/realms/osac", keycloakAddr)).
-		SetFlow(oauth.CredentialsFlow).
-		SetClientId(metadataCSIClientID).
-		SetClientSecret(string(clientSecret)).
-		SetScopes("openid", "organization").
-		Build()
-}
 
 type metadataMethodCapabilities struct {
 	PrivateCreate bool
