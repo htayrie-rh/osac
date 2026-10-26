@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -372,50 +373,66 @@ func updatePrivateMetadata(
 	if service == nil || !serviceHasMetadataMethod(service, "Update") {
 		return nil, fmt.Errorf("private metadata service has no Update method")
 	}
-	current, err := privateMetadataSnapshot(ctx, conn, service, id)
-	if err != nil {
-		return nil, err
-	}
-	metadataField := current.Descriptor().Fields().ByName("metadata")
-	metadata := current.Mutable(metadataField).Message()
-	if err := replaceMetadataMap(metadata, "labels", labels); err != nil {
-		return nil, err
-	}
-	if err := replaceMetadataMap(metadata, "annotations", annotations); err != nil {
-		return nil, err
-	}
-
 	method := service.Methods().ByName("Update")
-	request := dynamicpb.NewMessage(method.Input())
-	objectField := method.Input().Fields().ByName("object")
-	if objectField == nil {
-		return nil, fmt.Errorf("private metadata Update request %q has no object field", method.Input().FullName())
-	}
-	request.Set(objectField, protoreflect.ValueOfMessage(current.ProtoReflect()))
-	maskField := method.Input().Fields().ByName("update_mask")
-	if maskField != nil {
-		mask := dynamicpb.NewMessage(maskField.Message())
-		pathsField := maskField.Message().Fields().ByName("paths")
-		if pathsField == nil || pathsField.Kind() != protoreflect.StringKind || !pathsField.IsList() {
-			return nil, fmt.Errorf("private metadata Update mask %q has no string paths", maskField.Message().FullName())
+	var updated *dynamicpb.Message
+	err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		return status.Code(err) == codes.Aborted
+	}, func() error {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-		paths := mask.Mutable(pathsField).List()
-		paths.Append(protoreflect.ValueOfString("metadata.labels"))
-		paths.Append(protoreflect.ValueOfString("metadata.annotations"))
-		request.Set(maskField, protoreflect.ValueOfMessage(mask))
+		current, err := privateMetadataSnapshot(ctx, conn, service, id)
+		if err != nil {
+			return err
+		}
+		metadataField := current.Descriptor().Fields().ByName("metadata")
+		metadata := current.Mutable(metadataField).Message()
+		if err := replaceMetadataMap(metadata, "labels", labels); err != nil {
+			return err
+		}
+		if err := replaceMetadataMap(metadata, "annotations", annotations); err != nil {
+			return err
+		}
+
+		request := dynamicpb.NewMessage(method.Input())
+		objectField := method.Input().Fields().ByName("object")
+		if objectField == nil {
+			return fmt.Errorf("private metadata Update request %q has no object field", method.Input().FullName())
+		}
+		request.Set(objectField, protoreflect.ValueOfMessage(current.ProtoReflect()))
+		maskField := method.Input().Fields().ByName("update_mask")
+		if maskField != nil {
+			mask := dynamicpb.NewMessage(maskField.Message())
+			pathsField := maskField.Message().Fields().ByName("paths")
+			if pathsField == nil || pathsField.Kind() != protoreflect.StringKind || !pathsField.IsList() {
+				return fmt.Errorf("private metadata Update mask %q has no string paths", maskField.Message().FullName())
+			}
+			paths := mask.Mutable(pathsField).List()
+			paths.Append(protoreflect.ValueOfString("metadata.labels"))
+			paths.Append(protoreflect.ValueOfString("metadata.annotations"))
+			request.Set(maskField, protoreflect.ValueOfMessage(mask))
+		}
+		if lockField := method.Input().Fields().ByName("lock"); lockField != nil && lockField.Kind() == protoreflect.BoolKind {
+			request.Set(lockField, protoreflect.ValueOfBool(true))
+		}
+		response := dynamicpb.NewMessage(method.Output())
+		if err := conn.Invoke(ctx, metadataRPCMethodName(service, method.Name()), request, response); err != nil {
+			return fmt.Errorf("private metadata Update %q: %w", service.FullName(), err)
+		}
+		updatedField := method.Output().Fields().ByName("object")
+		if updatedField == nil || !response.Has(updatedField) {
+			return fmt.Errorf("private metadata Update %q returned no object", service.FullName())
+		}
+		updated = proto.Clone(response.Get(updatedField).Message().Interface()).(*dynamicpb.Message)
+		return nil
+	})
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		return nil, err
 	}
-	if lockField := method.Input().Fields().ByName("lock"); lockField != nil && lockField.Kind() == protoreflect.BoolKind {
-		request.Set(lockField, protoreflect.ValueOfBool(true))
-	}
-	response := dynamicpb.NewMessage(method.Output())
-	if err := conn.Invoke(ctx, metadataRPCMethodName(service, method.Name()), request, response); err != nil {
-		return nil, fmt.Errorf("private metadata Update %q: %w", service.FullName(), err)
-	}
-	updatedField := method.Output().Fields().ByName("object")
-	if updatedField == nil || !response.Has(updatedField) {
-		return nil, fmt.Errorf("private metadata Update %q returned no object", service.FullName())
-	}
-	return proto.Clone(response.Get(updatedField).Message().Interface()).(*dynamicpb.Message), nil
+	return updated, nil
 }
 
 // updatePublicMetadata submits a map-level public update with only the object
@@ -789,17 +806,4 @@ func mergeMetadataValues(existing, updates map[string]string) map[string]string 
 		result[key] = value
 	}
 	return result
-}
-
-func metadataMapsEqual(left, right map[string]string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for key, value := range left {
-		rightValue, ok := right[key]
-		if !ok || rightValue != value {
-			return false
-		}
-	}
-	return true
 }

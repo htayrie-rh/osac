@@ -16,6 +16,7 @@ package it
 import (
 	"context"
 	"fmt"
+	"maps"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2/dsl/core"
@@ -244,11 +245,11 @@ var _ = Describe("Public volumes API", func() {
 		Expect(err).NotTo(HaveOccurred())
 		before, err := privateVolumesClient.Get(ctx, privatev1.VolumesGetRequest_builder{Id: id}.Build())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(before.GetObject().GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(before.GetObject().GetMetadata().GetLabels(), map[string]string{
 			"admin.osac.openshift.io/metadata-test": "stored-label",
 			"example.com/metadata-test":             "visible-before",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(before.GetObject().GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(before.GetObject().GetMetadata().GetAnnotations(), map[string]string{
 			"operator.admin.osac.openshift.io/metadata-test": "stored-annotation",
 			"example.com/metadata-test":                      "visible-before",
 		})).To(BeTrue())
@@ -310,11 +311,11 @@ var _ = Describe("Public volumes API", func() {
 		Expect(grpcstatus.Code(err)).To(Equal(grpccodes.InvalidArgument))
 		afterRejected, err := privateVolumesClient.Get(ctx, privatev1.VolumesGetRequest_builder{Id: id}.Build())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRejected.GetObject().GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(afterRejected.GetObject().GetMetadata().GetLabels(), map[string]string{
 			"admin.osac.openshift.io/metadata-test": "stored-label",
 			"example.com/metadata-test":             "visible-before",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(afterRejected.GetObject().GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(afterRejected.GetObject().GetMetadata().GetAnnotations(), map[string]string{
 			"operator.admin.osac.openshift.io/metadata-test": "stored-annotation",
 			"example.com/metadata-test":                      "visible-before",
 		})).To(BeTrue())
@@ -335,11 +336,11 @@ var _ = Describe("Public volumes API", func() {
 		Expect(updated.GetObject().GetMetadata().GetAnnotations()).To(Equal(map[string]string{"example.com/metadata-test": "visible-after"}))
 		afterReplacement, err := privateVolumesClient.Get(ctx, privatev1.VolumesGetRequest_builder{Id: id}.Build())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterReplacement.GetObject().GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(afterReplacement.GetObject().GetMetadata().GetLabels(), map[string]string{
 			"admin.osac.openshift.io/metadata-test": "stored-label",
 			"example.com/metadata-test":             "visible-after",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(afterReplacement.GetObject().GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(afterReplacement.GetObject().GetMetadata().GetAnnotations(), map[string]string{
 			"operator.admin.osac.openshift.io/metadata-test": "stored-annotation",
 			"example.com/metadata-test":                      "visible-after",
 		})).To(BeTrue())

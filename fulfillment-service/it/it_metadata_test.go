@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 
@@ -40,6 +41,7 @@ const (
 	metadataPrivateAnnotationKey  = "admin.osac.openshift.io/integration"
 	metadataOrdinaryLabelKey      = "example.com/integration"
 	metadataOrdinaryAnnotationKey = "example.com/integration"
+	fixtureStorageBackendPassword = "metadata-fixture-credential"
 )
 
 var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func() {
@@ -144,15 +146,12 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(after.GetMetadata().GetTenant()).To(Equal(before.GetMetadata().GetTenant()))
 		afterOwnerReference, afterHasOwnerReference := after.GetMetadata().GetAnnotations()["osac.openshift.io/owner-reference"]
 		Expect(afterHasOwnerReference).To(Equal(hasOwnerReference))
-		Expect(metadataMapsEqual(
-			map[string]string{"owner-reference": afterOwnerReference},
-			map[string]string{"owner-reference": ownerReference},
-		)).To(BeTrue())
-		Expect(metadataMapsEqual(after.GetMetadata().GetLabels(), map[string]string{
+		Expect(afterOwnerReference).To(Equal(ownerReference))
+		Expect(maps.Equal(after.GetMetadata().GetLabels(), map[string]string{
 			metadataPrivateLabelKey:  "stored-label",
 			metadataOrdinaryLabelKey: "visible-label",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(after.GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(after.GetMetadata().GetAnnotations(), map[string]string{
 			metadataPrivateAnnotationKey:  "stored-annotation",
 			metadataOrdinaryAnnotationKey: "visible-annotation",
 		})).To(BeTrue())
@@ -167,8 +166,8 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(rejectedStatus).To(Equal(http.StatusBadRequest))
 		afterRESTRejection, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(after.GetMetadata().GetLabels(), afterRESTRejection.GetMetadata().GetLabels())).To(BeTrue())
-		Expect(metadataMapsEqual(after.GetMetadata().GetAnnotations(), afterRESTRejection.GetMetadata().GetAnnotations())).To(BeTrue())
+		Expect(maps.Equal(after.GetMetadata().GetLabels(), afterRESTRejection.GetMetadata().GetLabels())).To(BeTrue())
+		Expect(maps.Equal(after.GetMetadata().GetAnnotations(), afterRESTRejection.GetMetadata().GetAnnotations())).To(BeTrue())
 		Expect(after.GetMetadata().GetVersion()).To(Equal(afterRESTRejection.GetMetadata().GetVersion()))
 
 		updatedRESTStatus, _, err := patchComputeInstanceREST(ctx, accounts.tenantUser.HTTPClient, fixture.id,
@@ -177,11 +176,11 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(updatedRESTStatus).To(Equal(http.StatusOK))
 		afterRESTUpdate, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRESTUpdate.GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(afterRESTUpdate.GetMetadata().GetLabels(), map[string]string{
 			metadataPrivateLabelKey:  "stored-label",
 			metadataOrdinaryLabelKey: "rest-visible",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(afterRESTUpdate.GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(afterRESTUpdate.GetMetadata().GetAnnotations(), map[string]string{
 			metadataPrivateAnnotationKey:  "stored-annotation",
 			metadataOrdinaryAnnotationKey: "visible-annotation",
 		})).To(BeTrue())
@@ -195,8 +194,8 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(rejectedAnnotationStatus).To(Equal(http.StatusBadRequest))
 		afterRESTAnnotationRejection, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRESTUpdate.GetMetadata().GetLabels(), afterRESTAnnotationRejection.GetMetadata().GetLabels())).To(BeTrue())
-		Expect(metadataMapsEqual(afterRESTUpdate.GetMetadata().GetAnnotations(), afterRESTAnnotationRejection.GetMetadata().GetAnnotations())).To(BeTrue())
+		Expect(maps.Equal(afterRESTUpdate.GetMetadata().GetLabels(), afterRESTAnnotationRejection.GetMetadata().GetLabels())).To(BeTrue())
+		Expect(maps.Equal(afterRESTUpdate.GetMetadata().GetAnnotations(), afterRESTAnnotationRejection.GetMetadata().GetAnnotations())).To(BeTrue())
 		Expect(afterRESTUpdate.GetMetadata().GetVersion()).To(Equal(afterRESTAnnotationRejection.GetMetadata().GetVersion()))
 
 		updatedRESTAnnotationStatus, _, err := patchComputeInstanceREST(ctx, accounts.tenantUser.HTTPClient, fixture.id,
@@ -205,11 +204,11 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(updatedRESTAnnotationStatus).To(Equal(http.StatusOK))
 		afterRESTAnnotationUpdate, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRESTAnnotationUpdate.GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(afterRESTAnnotationUpdate.GetMetadata().GetLabels(), map[string]string{
 			metadataPrivateLabelKey:  "stored-label",
 			metadataOrdinaryLabelKey: "rest-visible",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(afterRESTAnnotationUpdate.GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(afterRESTAnnotationUpdate.GetMetadata().GetAnnotations(), map[string]string{
 			metadataPrivateAnnotationKey:  "stored-annotation",
 			metadataOrdinaryAnnotationKey: "rest-visible",
 		})).To(BeTrue())
@@ -220,10 +219,10 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(emptyRESTLabelStatus).To(Equal(http.StatusOK))
 		afterRESTEmptyLabelUpdate, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRESTEmptyLabelUpdate.GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(afterRESTEmptyLabelUpdate.GetMetadata().GetLabels(), map[string]string{
 			metadataPrivateLabelKey: "stored-label",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(afterRESTEmptyLabelUpdate.GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(afterRESTEmptyLabelUpdate.GetMetadata().GetAnnotations(), map[string]string{
 			metadataPrivateAnnotationKey:  "stored-annotation",
 			metadataOrdinaryAnnotationKey: "rest-visible",
 		})).To(BeTrue())
@@ -246,19 +245,19 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 			metadataPrivateAnnotationKey+"=rejected", metadataOrdinaryAnnotationKey+"=must-not-persist")).NotTo(Equal(0))
 		afterCLIRejection, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(afterRESTEmptyLabelUpdate.GetMetadata().GetLabels(), afterCLIRejection.GetMetadata().GetLabels())).To(BeTrue())
-		Expect(metadataMapsEqual(afterRESTEmptyLabelUpdate.GetMetadata().GetAnnotations(), afterCLIRejection.GetMetadata().GetAnnotations())).To(BeTrue())
+		Expect(maps.Equal(afterRESTEmptyLabelUpdate.GetMetadata().GetLabels(), afterCLIRejection.GetMetadata().GetLabels())).To(BeTrue())
+		Expect(maps.Equal(afterRESTEmptyLabelUpdate.GetMetadata().GetAnnotations(), afterCLIRejection.GetMetadata().GetAnnotations())).To(BeTrue())
 		Expect(afterRESTEmptyLabelUpdate.GetMetadata().GetVersion()).To(Equal(afterCLIRejection.GetMetadata().GetVersion()))
 
 		Expect(runMetadataCLI("label", "computeinstance", fixture.id, metadataOrdinaryLabelKey+"=cli-visible")).To(Equal(0))
 		Expect(runMetadataCLI("annotate", "computeinstance", fixture.id, metadataOrdinaryAnnotationKey+"=cli-visible")).To(Equal(0))
 		cliUpdated, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(cliUpdated.GetMetadata().GetLabels(), map[string]string{
+		Expect(maps.Equal(cliUpdated.GetMetadata().GetLabels(), map[string]string{
 			metadataPrivateLabelKey:  "stored-label",
 			metadataOrdinaryLabelKey: "cli-visible",
 		})).To(BeTrue())
-		Expect(metadataMapsEqual(cliUpdated.GetMetadata().GetAnnotations(), map[string]string{
+		Expect(maps.Equal(cliUpdated.GetMetadata().GetAnnotations(), map[string]string{
 			metadataPrivateAnnotationKey:  "stored-annotation",
 			metadataOrdinaryAnnotationKey: "cli-visible",
 		})).To(BeTrue())
@@ -267,8 +266,8 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(runMetadataCLI("annotate", "computeinstance", fixture.id, metadataOrdinaryAnnotationKey+"-")).To(Equal(0))
 		cliRemoved, err := fixture.privateSnapshot(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(cliRemoved.GetMetadata().GetLabels(), map[string]string{metadataPrivateLabelKey: "stored-label"})).To(BeTrue())
-		Expect(metadataMapsEqual(cliRemoved.GetMetadata().GetAnnotations(), map[string]string{metadataPrivateAnnotationKey: "stored-annotation"})).To(BeTrue())
+		Expect(maps.Equal(cliRemoved.GetMetadata().GetLabels(), map[string]string{metadataPrivateLabelKey: "stored-label"})).To(BeTrue())
+		Expect(maps.Equal(cliRemoved.GetMetadata().GetAnnotations(), map[string]string{metadataPrivateAnnotationKey: "stored-annotation"})).To(BeTrue())
 
 		By("checking descriptor-driven private replacement and empty-map behavior")
 		services, err := metadataServices("ComputeInstances")
@@ -280,13 +279,13 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 		Expect(err).NotTo(HaveOccurred())
 		labels, err := metadataMapValues(updated.ProtoReflect(), "labels")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(labels, map[string]string{
+		Expect(maps.Equal(labels, map[string]string{
 			metadataPrivateLabelKey:   "replacement-label",
 			"example.com/replacement": "visible",
 		})).To(BeTrue())
 		annotations, err := metadataMapValues(updated.ProtoReflect(), "annotations")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(metadataMapsEqual(annotations, map[string]string{
+		Expect(maps.Equal(annotations, map[string]string{
 			metadataPrivateAnnotationKey: "replacement-annotation",
 			"example.com/replacement":    "visible",
 		})).To(BeTrue())
@@ -471,7 +470,7 @@ var _ = Describe("reserved metadata privacy fixtures", Label("metadata"), func()
 					Endpoint: "https://storage.example.invalid",
 					Credentials: privatev1.StorageBackendCredentials_builder{
 						Username: "metadata-test",
-						Password: "metadata-fixture-credential",
+						Password: fixtureStorageBackendPassword,
 					}.Build(),
 				}.Build(),
 			}.Build(),
@@ -592,10 +591,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 	Expect(err).NotTo(HaveOccurred(), serviceName)
 	labels, err := metadataMapValues(updated.ProtoReflect(), "labels")
 	Expect(err).NotTo(HaveOccurred(), serviceName)
-	Expect(metadataMapsEqual(labels, firstLabels)).To(BeTrue(), serviceName)
+	Expect(maps.Equal(labels, firstLabels)).To(BeTrue(), serviceName)
 	annotations, err := metadataMapValues(updated.ProtoReflect(), "annotations")
 	Expect(err).NotTo(HaveOccurred(), serviceName)
-	Expect(metadataMapsEqual(annotations, firstAnnotations)).To(BeTrue(), serviceName)
+	Expect(maps.Equal(annotations, firstAnnotations)).To(BeTrue(), serviceName)
 
 	reservedFilter := fmt.Sprintf("this.id == %q && this.metadata.labels[%q] == %q",
 		id, metadataPrivateLabelKey, "private-one")
@@ -609,10 +608,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 		Expect(privateItems).To(HaveLen(1), serviceName)
 		privateLabels, mapErr := metadataMapValues(privateItems[0].ProtoReflect(), "labels")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(privateLabels, firstLabels)).To(BeTrue(), serviceName)
+		Expect(maps.Equal(privateLabels, firstLabels)).To(BeTrue(), serviceName)
 		privateAnnotations, mapErr := metadataMapValues(privateItems[0].ProtoReflect(), "annotations")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(privateAnnotations, firstAnnotations)).To(BeTrue(), serviceName)
+		Expect(maps.Equal(privateAnnotations, firstAnnotations)).To(BeTrue(), serviceName)
 	}
 	if serviceHasMetadataMethod(services.public, "List") {
 		By("rejecting public reserved-key queries and retaining ordinary filters for " + serviceName)
@@ -630,10 +629,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 		Expect(publicItems).To(HaveLen(1), serviceName)
 		publicLabels, mapErr := metadataMapValues(publicItems[0].ProtoReflect(), "labels")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(publicLabels, map[string]string{metadataOrdinaryLabelKey: "ordinary-one"})).To(BeTrue(), serviceName)
+		Expect(maps.Equal(publicLabels, map[string]string{metadataOrdinaryLabelKey: "ordinary-one"})).To(BeTrue(), serviceName)
 		publicAnnotations, mapErr := metadataMapValues(publicItems[0].ProtoReflect(), "annotations")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(publicAnnotations, map[string]string{metadataOrdinaryAnnotationKey: "ordinary-one"})).To(BeTrue(), serviceName)
+		Expect(maps.Equal(publicAnnotations, map[string]string{metadataOrdinaryAnnotationKey: "ordinary-one"})).To(BeTrue(), serviceName)
 	}
 	if serviceName == "BareMetalInstanceTypes" {
 		for _, filter := range []string{
@@ -658,10 +657,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 		Expect(publicErr).NotTo(HaveOccurred(), serviceName)
 		publicLabels, mapErr := metadataMapValues(publicObject.ProtoReflect(), "labels")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(publicLabels, map[string]string{metadataOrdinaryLabelKey: "ordinary-one"})).To(BeTrue(), serviceName)
+		Expect(maps.Equal(publicLabels, map[string]string{metadataOrdinaryLabelKey: "ordinary-one"})).To(BeTrue(), serviceName)
 		publicAnnotations, mapErr := metadataMapValues(publicObject.ProtoReflect(), "annotations")
 		Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-		Expect(metadataMapsEqual(publicAnnotations, map[string]string{metadataOrdinaryAnnotationKey: "ordinary-one"})).To(BeTrue(), serviceName)
+		Expect(maps.Equal(publicAnnotations, map[string]string{metadataOrdinaryAnnotationKey: "ordinary-one"})).To(BeTrue(), serviceName)
 
 		// Secrets and Tenants do not support public Create (Tenants only exposes
 		// public List/Get despite the generated descriptor listing Create).
@@ -742,10 +741,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 			Expect(snapshotErr).NotTo(HaveOccurred(), serviceName)
 			afterRejectedLabels, mapErr := metadataMapValues(afterRejected.ProtoReflect(), "labels")
 			Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-			Expect(metadataMapsEqual(afterRejectedLabels, beforeRejectedLabels)).To(BeTrue(), serviceName)
+			Expect(maps.Equal(afterRejectedLabels, beforeRejectedLabels)).To(BeTrue(), serviceName)
 			afterRejectedAnnotations, mapErr := metadataMapValues(afterRejected.ProtoReflect(), "annotations")
 			Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-			Expect(metadataMapsEqual(afterRejectedAnnotations, beforeRejectedAnnotations)).To(BeTrue(), serviceName)
+			Expect(maps.Equal(afterRejectedAnnotations, beforeRejectedAnnotations)).To(BeTrue(), serviceName)
 
 			By("preserving reserved metadata on ordinary public replacement for " + serviceName)
 			err = updatePublicMetadata(ctx, tool.ExternalView().AdminConn(), services.public, id,
@@ -756,13 +755,13 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 			Expect(snapshotErr).NotTo(HaveOccurred(), serviceName)
 			labels, mapErr := metadataMapValues(afterPublicUpdate.ProtoReflect(), "labels")
 			Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-			Expect(metadataMapsEqual(labels, map[string]string{
+			Expect(maps.Equal(labels, map[string]string{
 				metadataPrivateLabelKey:  "private-one",
 				metadataOrdinaryLabelKey: "ordinary-public-replacement",
 			})).To(BeTrue(), serviceName)
 			annotations, mapErr := metadataMapValues(afterPublicUpdate.ProtoReflect(), "annotations")
 			Expect(mapErr).NotTo(HaveOccurred(), serviceName)
-			Expect(metadataMapsEqual(annotations, map[string]string{
+			Expect(maps.Equal(annotations, map[string]string{
 				metadataPrivateAnnotationKey:  "private-one",
 				metadataOrdinaryAnnotationKey: "ordinary-public-replacement",
 			})).To(BeTrue(), serviceName)
@@ -775,10 +774,10 @@ func exercisePrivateMetadataReplacement(ctx context.Context, serviceName, id str
 	Expect(err).NotTo(HaveOccurred(), serviceName)
 	labels, err = metadataMapValues(updated.ProtoReflect(), "labels")
 	Expect(err).NotTo(HaveOccurred(), serviceName)
-	Expect(metadataMapsEqual(labels, secondLabels)).To(BeTrue(), serviceName)
+	Expect(maps.Equal(labels, secondLabels)).To(BeTrue(), serviceName)
 	annotations, err = metadataMapValues(updated.ProtoReflect(), "annotations")
 	Expect(err).NotTo(HaveOccurred(), serviceName)
-	Expect(metadataMapsEqual(annotations, secondAnnotations)).To(BeTrue(), serviceName)
+	Expect(maps.Equal(annotations, secondAnnotations)).To(BeTrue(), serviceName)
 
 	updated, err = updatePrivateMetadata(ctx, tool.InternalView().AdminConn(), services.private, id, nil, nil)
 	Expect(err).NotTo(HaveOccurred(), serviceName)
@@ -883,9 +882,6 @@ func expectMetadataProjection(object *publicv1.ComputeInstance, privateObject *p
 	if privateOwnerReference == "" {
 		Expect(hasPublicOwnerReference).To(BeFalse())
 	} else {
-		Expect(metadataMapsEqual(
-			map[string]string{"owner-reference": publicOwnerReference},
-			map[string]string{"owner-reference": privateOwnerReference},
-		)).To(BeTrue())
+		Expect(publicOwnerReference).To(Equal(privateOwnerReference))
 	}
 }

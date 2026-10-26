@@ -19,6 +19,7 @@ package it
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"reflect"
 	"strings"
@@ -209,7 +210,7 @@ func TestMetadataMapValuesReplacesOnlyRequestedMap(t *testing.T) {
 	if !reflect.DeepEqual(gotAnnotations, map[string]string{"old-annotation": "old"}) {
 		t.Fatalf("annotations changed while replacing labels: %v", gotAnnotations)
 	}
-	if metadataMapsEqual(map[string]string{"left": ""}, map[string]string{"right": ""}) {
+	if maps.Equal(map[string]string{"left": ""}, map[string]string{"right": ""}) {
 		t.Fatal("maps with different keys and empty values must not compare equal")
 	}
 }
@@ -294,7 +295,7 @@ func TestPublicMetadataCreateObjectSanitizesOutputFields(t *testing.T) {
 		got, mapErr := metadataMapValues(created.ProtoReflect(), fieldName)
 		if mapErr != nil {
 			t.Errorf("metadataMapValues(%s): %v", fieldName, mapErr)
-		} else if !metadataMapsEqual(got, want) {
+		} else if !maps.Equal(got, want) {
 			t.Errorf("metadata.%s = %v, want %v", fieldName, got, want)
 		}
 	}
