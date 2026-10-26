@@ -282,12 +282,14 @@ var _ = Describe("Annotations", func() {
 		"Rejects invalid annotations on create and update",
 		func(key string, expected string) {
 			By("Creating a cluster with an invalid annotation key", func() {
+				createName := fmt.Sprintf("annotations-test-%s", uuid.New()[24:32])
 				_, err := clustersClient.Create(ctx, publicv1.ClustersCreateRequest_builder{
 					Object: publicv1.Cluster_builder{
 						Metadata: publicv1.Metadata_builder{
-							Name: fmt.Sprintf("annotations-test-%s", uuid.New()[24:32]),
+							Name: createName,
 							Annotations: map[string]string{
-								key: "",
+								key:                              "",
+								"example.com/metadata-atomicity": "must-not-persist",
 							},
 						}.Build(),
 						Spec: publicv1.ClusterSpec_builder{
@@ -300,6 +302,14 @@ var _ = Describe("Annotations", func() {
 				Expect(ok).To(BeTrue())
 				Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
 				Expect(status.Message()).To(Equal(expected))
+				nameFilter := fmt.Sprintf("this.metadata.name == %q", createName)
+				listResponse, err := adminClustersClient.List(ctx, privatev1.ClustersListRequest_builder{
+					Filter: &nameFilter,
+				}.Build())
+				Expect(err).NotTo(HaveOccurred())
+				if len(listResponse.GetItems()) != 0 {
+					Fail("rejected mixed Create persisted an object")
+				}
 			})
 
 			By("Updating a cluster with the same invalid annotation key", func() {
@@ -328,7 +338,8 @@ var _ = Describe("Annotations", func() {
 						Metadata: publicv1.Metadata_builder{
 							Name: object.GetMetadata().GetName(),
 							Annotations: map[string]string{
-								key: "",
+								key:                              "",
+								"example.com/metadata-atomicity": "must-not-persist",
 							},
 						}.Build(),
 						Spec: publicv1.ClusterSpec_builder{
@@ -342,6 +353,15 @@ var _ = Describe("Annotations", func() {
 				Expect(ok).To(BeTrue())
 				Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
 				Expect(status.Message()).To(Equal(expected))
+				privateResponse, err := adminClustersClient.Get(ctx, privatev1.ClustersGetRequest_builder{
+					Id: object.GetId(),
+				}.Build())
+				Expect(err).NotTo(HaveOccurred())
+				expectMetadataKeyAbsent(
+					privateResponse.GetObject().GetMetadata().GetAnnotations(),
+					"example.com/metadata-atomicity",
+					"rejected mixed Update",
+				)
 			})
 		},
 		Entry(
