@@ -161,22 +161,32 @@ var _ = Describe("Public storage tiers", func() {
 				Metadata: privatev1.Metadata_builder{
 					Labels: map[string]string{
 						markerKey: markerValue,
-						"admin.osac.openshift.io/private-filter-test": "secret",
+						"admin.osac.openshift.io/private-filter-test":   "secret-label",
+						"controller.admin.osac.openshift.io/private-it": "secret-subdomain-label",
+					},
+					Annotations: map[string]string{
+						markerKey: markerValue,
+						"admin.osac.openshift.io/private-filter-test":   "secret-annotation",
+						"controller.admin.osac.openshift.io/private-it": "secret-subdomain-annotation",
 					},
 				}.Build(),
 			}.Build(),
-			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.labels"}},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"metadata.labels", "metadata.annotations"}},
 		}.Build())
 		Expect(err).ToNot(HaveOccurred())
 
-		reservedFilter := "this.metadata.labels['admin.osac.openshift.io/private-filter-test'] == 'secret'"
-		_, err = publicClient.List(ctx, publicv1.StorageTiersListRequest_builder{
-			Filter: &reservedFilter,
-		}.Build())
-		Expect(err).To(HaveOccurred())
-		status, ok := grpcstatus.FromError(err)
-		Expect(ok).To(BeTrue())
-		Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+		for _, reservedFilter := range []string{
+			"this.metadata.labels['admin.osac.openshift.io/private-filter-test'] == 'secret-label'",
+			"this.metadata.annotations['controller.admin.osac.openshift.io/private-it'] == 'secret-subdomain-annotation'",
+		} {
+			_, err = publicClient.List(ctx, publicv1.StorageTiersListRequest_builder{
+				Filter: &reservedFilter,
+			}.Build())
+			Expect(err).To(HaveOccurred())
+			status, ok := grpcstatus.FromError(err)
+			Expect(ok).To(BeTrue())
+			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
+		}
 
 		publicMapFilter := fmt.Sprintf("this.metadata.labels[%q] == %q", markerKey, markerValue)
 		response, err := publicClient.List(ctx, publicv1.StorageTiersListRequest_builder{
@@ -185,6 +195,25 @@ var _ = Describe("Public storage tiers", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(response.GetItems()).To(HaveLen(1))
 		Expect(response.GetItems()[0].GetId()).To(Equal(id))
+		Expect(response.GetTotal()).To(Equal(int32(1)))
+
+		publicAnnotationFilter := fmt.Sprintf("this.metadata.annotations[%q] == %q", markerKey, markerValue)
+		response, err = publicClient.List(ctx, publicv1.StorageTiersListRequest_builder{
+			Filter: &publicAnnotationFilter,
+		}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(response.GetItems()).To(HaveLen(1))
+		Expect(response.GetItems()[0].GetId()).To(Equal(id))
+		Expect(response.GetTotal()).To(Equal(int32(1)))
+
+		publicObject, err := publicClient.Get(ctx, publicv1.StorageTiersGetRequest_builder{Id: id}.Build())
+		Expect(err).ToNot(HaveOccurred())
+		expectMetadataEntry(publicObject.GetObject().GetMetadata().GetLabels(), markerKey, markerValue, "public StorageTier Get")
+		expectMetadataEntry(publicObject.GetObject().GetMetadata().GetAnnotations(), markerKey, markerValue, "public StorageTier Get")
+		expectMetadataKeyAbsent(publicObject.GetObject().GetMetadata().GetLabels(), "admin.osac.openshift.io/private-filter-test", "public StorageTier Get")
+		expectMetadataKeyAbsent(publicObject.GetObject().GetMetadata().GetLabels(), "controller.admin.osac.openshift.io/private-it", "public StorageTier Get")
+		expectMetadataKeyAbsent(publicObject.GetObject().GetMetadata().GetAnnotations(), "admin.osac.openshift.io/private-filter-test", "public StorageTier Get")
+		expectMetadataKeyAbsent(publicObject.GetObject().GetMetadata().GetAnnotations(), "controller.admin.osac.openshift.io/private-it", "public StorageTier Get")
 	})
 
 	It("Supports pagination", func() {
