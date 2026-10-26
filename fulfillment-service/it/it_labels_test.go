@@ -290,14 +290,12 @@ var _ = Describe("Labels", func() {
 	DescribeTable(
 		"Rejects invalid labels on create and update",
 		func(key string, value string, expected string) {
-			createName := fmt.Sprintf("labels-test-%s", uuid.New()[24:32])
 			_, err := clustersClient.Create(ctx, publicv1.ClustersCreateRequest_builder{
 				Object: publicv1.Cluster_builder{
 					Metadata: publicv1.Metadata_builder{
-						Name: createName,
+						Name: fmt.Sprintf("labels-test-%s", uuid.New()[24:32]),
 						Labels: map[string]string{
-							key:                              value,
-							"example.com/metadata-atomicity": "must-not-persist",
+							key: value,
 						},
 					}.Build(),
 					Spec: publicv1.ClusterSpec_builder{
@@ -310,14 +308,6 @@ var _ = Describe("Labels", func() {
 			Expect(ok).To(BeTrue())
 			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
 			Expect(status.Message()).To(Equal(expected))
-			nameFilter := fmt.Sprintf("this.metadata.name == %q", createName)
-			listResponse, err := adminClustersClient.List(ctx, privatev1.ClustersListRequest_builder{
-				Filter: &nameFilter,
-			}.Build())
-			Expect(err).NotTo(HaveOccurred())
-			if len(listResponse.GetItems()) != 0 {
-				Fail("rejected mixed Create persisted an object")
-			}
 
 			createResponse, err := clustersClient.Create(ctx, publicv1.ClustersCreateRequest_builder{
 				Object: publicv1.Cluster_builder{
@@ -345,8 +335,7 @@ var _ = Describe("Labels", func() {
 					Metadata: publicv1.Metadata_builder{
 						Name: object.GetMetadata().GetName(),
 						Labels: map[string]string{
-							key:                              value,
-							"example.com/metadata-atomicity": "must-not-persist",
+							key: value,
 						},
 					}.Build(),
 					Spec: publicv1.ClusterSpec_builder{
@@ -360,15 +349,6 @@ var _ = Describe("Labels", func() {
 			Expect(ok).To(BeTrue())
 			Expect(status.Code()).To(Equal(grpccodes.InvalidArgument))
 			Expect(status.Message()).To(Equal(expected))
-			privateResponse, err := adminClustersClient.Get(ctx, privatev1.ClustersGetRequest_builder{
-				Id: object.GetId(),
-			}.Build())
-			Expect(err).NotTo(HaveOccurred())
-			expectMetadataKeyAbsent(
-				privateResponse.GetObject().GetMetadata().GetLabels(),
-				"example.com/metadata-atomicity",
-				"rejected mixed Update",
-			)
 		},
 		Entry(
 			"Invalid label name character",

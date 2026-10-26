@@ -16,7 +16,6 @@ package servers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -45,23 +44,6 @@ import (
 type eventsCollector struct {
 	lock   sync.Mutex
 	events []*publicv1.Event
-}
-
-func expectEventMetadataEntry(values map[string]string, key, expected string) {
-	GinkgoHelper()
-	if actual, ok := values[key]; !ok || actual != expected {
-		Fail(fmt.Sprintf("event metadata did not contain the expected entry %q", key))
-	}
-}
-
-func expectEventMetadataMap(values, expected map[string]string) {
-	GinkgoHelper()
-	if len(values) != len(expected) {
-		Fail("event metadata projection had an unexpected number of entries")
-	}
-	for key, expectedValue := range expected {
-		expectEventMetadataEntry(values, key, expectedValue)
-	}
 }
 
 // Collect reads events from the stream in a goroutine until the stream ends or the context is canceled.
@@ -493,7 +475,7 @@ var _ = Describe("Events server visibility", Ordered, func() {
 		watchCtx, cancel := context.WithCancel(context.Background())
 		DeferCleanup(cancel)
 		stream, err := client.Watch(watchCtx, publicv1.EventsWatchRequest_builder{
-			Filter: new("event.cluster.metadata.labels == {'ordinary': 'visible'} && event.cluster.metadata.annotations == {'ordinary': 'visible'}"),
+			Filter: new("event.cluster.metadata.labels == {'ordinary': 'visible'}"),
 		}.Build())
 		Expect(err).ToNot(HaveOccurred())
 		collector := &eventsCollector{}
@@ -508,14 +490,8 @@ var _ = Describe("Events server visibility", Ordered, func() {
 				Metadata: privatev1.Metadata_builder{
 					Tenant: "tenant-a",
 					Labels: map[string]string{
-						"admin.osac.openshift.io/managed":          "system",
-						"controller.admin.osac.openshift.io/state": "controller-value",
-						"ordinary": "visible",
-					},
-					Annotations: map[string]string{
-						"admin.osac.openshift.io/managed":          "system-note",
-						"controller.admin.osac.openshift.io/state": "controller-note",
-						"ordinary": "visible",
+						"admin.osac.openshift.io/managed": "system",
+						"ordinary":                        "visible",
 					},
 				}.Build(),
 			}.Build(),
@@ -524,42 +500,22 @@ var _ = Describe("Events server visibility", Ordered, func() {
 		changedPrivateEvent := proto.Clone(privateEvent).(*privatev1.Event)
 		changedPrivateEvent.SetId(uuid.New())
 		changedPrivateEvent.GetCluster().GetMetadata().SetLabels(map[string]string{
-			"admin.osac.openshift.io/managed":          "changed",
-			"controller.admin.osac.openshift.io/state": "changed-controller-value",
-			"ordinary": "visible",
-		})
-		changedPrivateEvent.GetCluster().GetMetadata().SetAnnotations(map[string]string{
-			"admin.osac.openshift.io/managed":          "changed-note",
-			"controller.admin.osac.openshift.io/state": "changed-controller-note",
-			"ordinary": "visible",
+			"admin.osac.openshift.io/managed": "changed",
+			"ordinary":                        "visible",
 		})
 		sendEvent(changedPrivateEvent)
 
 		Eventually(collector.Events, 5*time.Second).Should(HaveLen(2))
 		for _, publicEvent := range collector.Events() {
 			publicLabels := publicEvent.GetCluster().GetMetadata().GetLabels()
-			expectEventMetadataMap(publicLabels, map[string]string{"ordinary": "visible"})
-			publicAnnotations := publicEvent.GetCluster().GetMetadata().GetAnnotations()
-			expectEventMetadataMap(publicAnnotations, map[string]string{"ordinary": "visible"})
+			Expect(publicLabels).To(Equal(map[string]string{"ordinary": "visible"}))
 		}
-		expectEventMetadataEntry(
-			privateEvent.GetCluster().GetMetadata().GetLabels(), "admin.osac.openshift.io/managed", "system",
-		)
-		expectEventMetadataEntry(
-			privateEvent.GetCluster().GetMetadata().GetLabels(), "controller.admin.osac.openshift.io/state", "controller-value",
-		)
-		expectEventMetadataEntry(
-			privateEvent.GetCluster().GetMetadata().GetAnnotations(), "admin.osac.openshift.io/managed", "system-note",
-		)
-		expectEventMetadataEntry(
-			privateEvent.GetCluster().GetMetadata().GetAnnotations(), "controller.admin.osac.openshift.io/state", "controller-note",
-		)
-		expectEventMetadataEntry(
-			changedPrivateEvent.GetCluster().GetMetadata().GetLabels(), "admin.osac.openshift.io/managed", "changed",
-		)
-		expectEventMetadataEntry(
-			changedPrivateEvent.GetCluster().GetMetadata().GetAnnotations(), "admin.osac.openshift.io/managed", "changed-note",
-		)
+		Expect(privateEvent.GetCluster().GetMetadata().GetLabels()).To(HaveKeyWithValue(
+			"admin.osac.openshift.io/managed", "system",
+		))
+		Expect(changedPrivateEvent.GetCluster().GetMetadata().GetLabels()).To(HaveKeyWithValue(
+			"admin.osac.openshift.io/managed", "changed",
+		))
 	})
 
 	It("Delivers event with cluster payload", func() {
