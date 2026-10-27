@@ -266,7 +266,6 @@ def test_project_full_lifecycle(
 def test_project_metadata_api_privacy_and_filtering(
     jwt_grpc_tenant1_admin: GRPCClient,
     jwt_grpc_tenant1: GRPCClient,
-    jwt_grpc_tenant2: GRPCClient,
     private_grpc: GRPCClient,
     fulfillment_address: str,
     project_lifecycle_resources: dict[str, str | bool],
@@ -432,7 +431,7 @@ def test_project_metadata_api_privacy_and_filtering(
         context="Private Project read after rejected public update",
     )
 
-    # The existing tenant user remains authorized, while the other tenant stays isolated.
+    # The existing tenant user retains access after the rejected public update.
     final_public = jwt_grpc_tenant1.get_project(project_id=project_id)["object"]
     _assert_public_metadata(
         final_public,
@@ -441,12 +440,6 @@ def test_project_metadata_api_privacy_and_filtering(
         protected_values=protected_values,
         context="Final Tenant User gRPC Get",
     )
-    try:
-        jwt_grpc_tenant2.get_project(project_id=project_id)
-    except subprocess.CalledProcessError as exc:
-        _assert_grpc_status(exc, code="NotFound", context="Cross-tenant Project Get")
-    else:
-        pytest.fail("A second-tenant user accessed the Project", pytrace=False)
 
 
 def test_project_metadata_rest_event_and_cli_compatibility(

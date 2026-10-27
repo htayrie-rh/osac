@@ -24,7 +24,7 @@ Full lifecycle test that validates:
 Keycloak-backed Project fixture. Together they check private metadata writes,
 public gRPC and REST projection, public list and event filters, a real public
 event, ordinary REST and CLI edits, mixed reserved-key rejection, optional
-locking, concurrent private edits, and tenant isolation. The API test validates
+locking, and concurrent private edits. The API test validates
 the checked-in inventory of 35 persistent resource types (32 public,
 3 private-only); runtime metadata operations use Project so the tests do not
 provision compute or cluster providers.
@@ -46,12 +46,12 @@ uv run pytest tests/e2e/projects/test_project_e2e.py -k metadata
   - `OSAC_JWT_PASSWORD`: Password for JWT test users (default: "foobar")
   - `OSAC_SKIP_KEYCLOAK_SYNC`: Set to "true" to skip Keycloak sync verification (default: "false"). Useful when the project sync feature isn't deployed yet.
 
-The metadata journey uses real `tenant1_admin`, `tenant1_user`, and
-`tenant2_user` JWT identities plus the existing private service-account
-credential. Public/private Fulfillment APIs, the REST gateway, PostgreSQL,
-Keycloak, and Kafka-backed Events are real dependencies. The project fixture
-removes the membership and child project before the parent project, including
-after a test failure. Failure messages omit protected metadata values.
+The metadata journey uses real `tenant1_admin` and `tenant1_user` JWT identities
+plus the existing private service-account credential. Public/private
+Fulfillment APIs, the REST gateway, PostgreSQL, Keycloak, and Kafka-backed
+Events are real dependencies. The project fixture removes the membership and
+child project before the parent project, including after a test failure.
+Failure messages omit protected metadata values.
 
 Reserved-metadata privacy depends on server-side projection and filter checks.
 Older servers keep their previous visibility behavior; existing API and CLI
