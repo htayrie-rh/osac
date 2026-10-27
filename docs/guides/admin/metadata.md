@@ -69,15 +69,17 @@ The API has service-specific method limits in addition to these metadata rules:
 - Public `ExternalIPPools` supports only List and Get. Its private service retains the existing
   methods.
 - Private Update supports metadata maps on `NetworkClasses`, `VirtualNetworks`, `Subnets`,
-  `SecurityGroups`, `ExternalIPPools`, `ExternalIPs`, `ExternalIPAttachments`, and `NATGateways`.
+  `SecurityGroups`, `ExternalIPPools`, `ExternalIPs`, `ExternalIPAttachments`, `NATGateways`,
+  and `FabricDomains`.
   Updates to `ExternalIPs`, `ExternalIPAttachments`, and `NATGateways` require a non-empty existing
   update mask; include the metadata map path explicitly.
 - Public `SecurityGroups.Update` replaces only ingress and egress rule lists. It cannot update
   metadata and preserves the object's metadata.
 - Public `FabricDomains` retains Create, List, Get, Update, and Delete.
 - The CSI identity can use private `Volumes.Create`, `Get`, `List`, and `Delete`. It has no private
-  `Volumes.Update` or `Signal` permission; the existing application layer scopes its requests using
-  the identity's organization claim. The metadata feature does not widen this method set.
+  `Volumes.Update` or `Signal` permission. The current shared CSI identity has universal tenant
+  scope; tenant information is carried in request metadata rather than isolated by identity. The
+  metadata feature does not widen this method set or change that existing scope.
 
 The private method surface is not a promise that every private service identity can call every
 method. In particular, use the caller's existing policy and service contract when deciding whether

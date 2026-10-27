@@ -5,7 +5,9 @@ import queue
 import ssl
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from http.client import HTTPException, HTTPResponse, HTTPSConnection
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -70,8 +72,19 @@ def _safe_grpc_call(client: GRPCClient, *, service: str, data: dict[str, Any], c
         raise AssertionError(f"{context} failed; request and response details redacted") from None
 
 
+def _event_from_watch_response(response: dict[str, Any]) -> dict[str, Any]:
+    watch_response = response.get("result", response)
+    return watch_response.get("event") or {}
+
+
 def _rest_request(
-    fulfillment_address: str, *, token: str, method: str, path: str, body: dict[str, Any] | None = None
+    fulfillment_address: str,
+    *,
+    token: str,
+    method: str,
+    path: str,
+    body: dict[str, Any] | None = None,
+    timeout: float = EVENT_WATCH_TIMEOUT_SECONDS,
 ) -> tuple[int, dict[str, Any]]:
     host = fulfillment_address.rsplit(":", 1)[0]
     request_body = json.dumps(body).encode() if body is not None else None
@@ -82,9 +95,7 @@ def _rest_request(
         method=method,
     )
     try:
-        with urlopen(
-            request, context=ssl._create_unverified_context(), timeout=EVENT_WATCH_TIMEOUT_SECONDS
-        ) as response:
+        with urlopen(request, context=ssl._create_unverified_context(), timeout=timeout) as response:
             payload = response.read()
             try:
                 return response.status, json.loads(payload) if payload else {}
@@ -103,26 +114,44 @@ class _PublicProjectEventWatch:
         host = fulfillment_address.rsplit(":", 1)[0]
         filter_expr = f'event.project.id == "{project_id}"'
         query = urlencode({"filter": filter_expr})
-        url = f"https://{host}/api/events/v1/events/watch?{query}"
-        request = Request(url, headers={"Authorization": f"Bearer {token}"})
-        try:
-            self._response = urlopen(
-                request, context=ssl._create_unverified_context(), timeout=EVENT_WATCH_TIMEOUT_SECONDS
-            )
-        except HTTPError as exc:
-            pytest.fail(f"Public Events Watch failed with HTTP {exc.code}", pytrace=False)
-        except (OSError, URLError):
-            pytest.fail("Public Events Watch could not connect; details redacted", pytrace=False)
-
+        self._path = f"/api/events/v1/events/watch?{query}"
+        self._token = token
+        self._connection = HTTPSConnection(
+            host, timeout=EVENT_WATCH_TIMEOUT_SECONDS, context=ssl._create_unverified_context()
+        )
+        self._closed = threading.Event()
         self._events: queue.Queue[dict[str, Any] | None] = queue.Queue()
-        self._reader = threading.Thread(target=self._read_events, daemon=True)
+        self._response: HTTPResponse | None = None
+        self._reader = threading.Thread(target=self._open_and_read_events, daemon=True)
         self._reader.start()
 
+    def _open_and_read_events(self) -> None:
+        try:
+            if self._closed.is_set():
+                self._events.put(None)
+                return
+            self._connection.request("GET", self._path, headers={"Authorization": f"Bearer {self._token}"})
+            if self._closed.is_set():
+                self._connection.close()
+                self._events.put(None)
+                return
+            self._response = self._connection.getresponse()
+            if self._response.status != 200:
+                self._events.put(None)
+                return
+            self._read_events()
+        except (HTTPException, OSError, URLError):
+            self._events.put(None)
+
     def _read_events(self) -> None:
+        response = self._response
+        if response is None:
+            self._events.put(None)
+            return
         decoder = json.JSONDecoder()
         buffer = ""
         try:
-            for raw_line in self._response:
+            for raw_line in response:
                 buffer += raw_line.decode("utf-8")
                 while buffer.strip():
                     content = buffer.lstrip()
@@ -137,17 +166,20 @@ class _PublicProjectEventWatch:
         else:
             self._events.put(None)
 
-    def next_event(self) -> dict[str, Any]:
+    def wait_for_event(self, timeout: float) -> dict[str, Any] | None:
         try:
-            event = self._events.get(timeout=EVENT_WATCH_TIMEOUT_SECONDS)
+            event = self._events.get(timeout=timeout)
         except queue.Empty:
-            pytest.fail("No matching public Project event arrived before the bounded timeout", pytrace=False)
+            return None
         if event is None:
             pytest.fail("Public Project event stream closed before an event arrived", pytrace=False)
         return event
 
     def close(self) -> None:
-        self._response.close()
+        self._closed.set()
+        if self._response is not None:
+            self._response.close()
+        self._connection.close()
         self._reader.join(timeout=5)
 
     def __enter__(self) -> _PublicProjectEventWatch:
@@ -496,27 +528,60 @@ def test_project_metadata_rest_event_and_cli_compatibility(
     if event_filter_status != 400:
         pytest.fail("Public Events Watch accepted an explicit reserved metadata filter", pytrace=False)
 
-    # Apply an ordinary REST edit while a real public event watch is connected.
+    # Apply an ordinary REST edit while the public event watch attaches.
     expected_labels_after_rest = dict(expected_labels)
-    expected_labels_after_rest[rest_label_key] = rest_label_value
-    expected_public_labels_after_rest = _visible_map(expected_labels_after_rest)
+    rest_responses_by_value: dict[str, dict[str, Any]] = {}
+    expected_public_labels_by_value: dict[str, dict[str, str]] = {}
     rest_update_query = urlencode({"updateMask": "metadata.labels"})
     rest_update_path = f"{rest_path}?{rest_update_query}"
     with _PublicProjectEventWatch(
         fulfillment_address, token=jwt_grpc_tenant1_admin.token, project_id=project_id
     ) as event_watch:
-        status, rest_update_response = _rest_request(
-            fulfillment_address,
-            token=jwt_grpc_tenant1_admin.token,
-            method="PATCH",
-            path=rest_update_path,
-            body={"id": project_id, "metadata": {"labels": expected_public_labels_after_rest}},
-        )
-        if status != 200:
-            pytest.fail("Ordinary REST metadata update did not succeed", pytrace=False)
-        event_response = event_watch.next_event()
+        event_response = None
+        matched_event_value = None
+        # The REST streaming gateway waits for the first event before it returns
+        # response headers. Retry ordinary edits while the watcher attaches so
+        # the test does not block opening the stream before it can publish.
+        event_deadline = time.monotonic() + EVENT_WATCH_TIMEOUT_SECONDS
+        retry_intervals = (1, 2, 4, 8, 15)
+        for attempt, retry_interval in enumerate(retry_intervals):
+            remaining = event_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            attempt_value = f"{rest_label_value}-{attempt}"
+            expected_labels_after_rest[rest_label_key] = attempt_value
+            expected_public_labels = _visible_map(expected_labels_after_rest)
+            status, rest_update_response = _rest_request(
+                fulfillment_address,
+                token=jwt_grpc_tenant1_admin.token,
+                method="PATCH",
+                path=rest_update_path,
+                body={"id": project_id, "metadata": {"labels": expected_public_labels}},
+                timeout=remaining,
+            )
+            if status != 200:
+                pytest.fail("Ordinary REST metadata update did not succeed", pytrace=False)
+            rest_responses_by_value[attempt_value] = rest_update_response.get("object", rest_update_response)
+            expected_public_labels_by_value[attempt_value] = expected_public_labels
 
-    updated_project = rest_update_response.get("object", rest_update_response)
+            remaining = event_deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            event_response = event_watch.wait_for_event(timeout=min(retry_interval, remaining))
+            if event_response is None:
+                continue
+            event_project = _event_from_watch_response(event_response).get("project") or {}
+            event_metadata = event_project.get("metadata") or {}
+            matched_event_value = (event_metadata.get("labels") or {}).get(rest_label_key)
+            if matched_event_value in rest_responses_by_value:
+                break
+            event_response = None
+
+        if event_response is None or matched_event_value not in rest_responses_by_value:
+            pytest.fail("No matching public Project event arrived before the bounded retries", pytrace=False)
+
+    updated_project = rest_responses_by_value[matched_event_value]
+    expected_public_labels_after_rest = expected_public_labels_by_value[matched_event_value]
     _assert_public_metadata(
         updated_project,
         labels=expected_public_labels_after_rest,
@@ -524,8 +589,8 @@ def test_project_metadata_rest_event_and_cli_compatibility(
         protected_values=protected_values,
         context="REST Update response",
     )
-    project_event = (event_response.get("event") or {}).get("project") or {}
-    if (event_response.get("event") or {}).get("type") != "EVENT_TYPE_OBJECT_UPDATED":
+    project_event = _event_from_watch_response(event_response).get("project") or {}
+    if _event_from_watch_response(event_response).get("type") != "EVENT_TYPE_OBJECT_UPDATED":
         pytest.fail("Public event was not an object update", pytrace=False)
     _assert_public_metadata(
         project_event,
