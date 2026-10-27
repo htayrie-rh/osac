@@ -18,48 +18,50 @@ package dao
 
 import (
 	"context"
-	"log/slog"
-	"strings"
-	"testing"
 
-	"google.golang.org/protobuf/reflect/protoreflect"
+	. "github.com/onsi/ginkgo/v2/dsl/core"
+	. "github.com/onsi/ginkgo/v2/dsl/table"
+	. "github.com/onsi/gomega"
 
 	privatev1 "github.com/osac-project/osac/proto/gen/osac/private/v1"
 	publicv1 "github.com/osac-project/osac/proto/gen/osac/public/v1"
 )
 
-func TestFilterTranslatorReservedMetadataKeys(t *testing.T) {
-	publicTranslator := newMetadataFilterTranslator(t, (*publicv1.ComputeInstance)(nil).ProtoReflect().Descriptor())
-	privateTranslator := newMetadataFilterTranslator(t, (*privatev1.ComputeInstance)(nil).ProtoReflect().Descriptor())
+var _ = Describe("Filter translator metadata keys", func() {
+	var publicTranslator, privateTranslator *FilterTranslator
 
-	reservedFilters := []string{
-		`this.metadata.labels['admin.osac.openshift.io/owner-reference'] == 'stored-value'`,
-		`this.metadata.labels['operator.admin.osac.openshift.io/provider-id'] != ''`,
-		`'admin.osac.openshift.io/owner-reference' in this.metadata.labels`,
-	}
-	for _, filter := range reservedFilters {
-		t.Run(filter, func(t *testing.T) {
-			if _, err := publicTranslator.Translate(context.Background(), filter); err == nil {
-				t.Fatal("public filter translation accepted a reserved metadata key")
-			} else if strings.Contains(err.Error(), "owner-reference") || strings.Contains(err.Error(), "provider-id") {
-				t.Fatal("filter error exposed the reserved metadata key")
-			}
-			if _, err := privateTranslator.Translate(context.Background(), filter); err != nil {
-				t.Fatalf("private filter translation rejected reserved metadata: %v", err)
-			}
-		})
-	}
+	BeforeEach(func() {
+		var err error
+		publicTranslator, err = NewFilterTranslator().
+			SetLogger(logger).
+			SetDescriptor((*publicv1.ComputeInstance)(nil).ProtoReflect().Descriptor()).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
 
-	if _, err := publicTranslator.Translate(context.Background(), `this.metadata.labels['example.com/app'] == 'web'`); err != nil {
-		t.Fatalf("public filter translation rejected an ordinary metadata key: %v", err)
-	}
-}
+		privateTranslator, err = NewFilterTranslator().
+			SetLogger(logger).
+			SetDescriptor((*privatev1.ComputeInstance)(nil).ProtoReflect().Descriptor()).
+			Build()
+		Expect(err).ToNot(HaveOccurred())
+	})
 
-func newMetadataFilterTranslator(t *testing.T, descriptor protoreflect.MessageDescriptor) *FilterTranslator {
-	t.Helper()
-	translator, err := NewFilterTranslator().SetLogger(slog.Default()).SetDescriptor(descriptor).Build()
-	if err != nil {
-		t.Fatalf("build metadata filter translator: %v", err)
-	}
-	return translator
-}
+	DescribeTable("rejects reserved metadata keys in public filters",
+		func(ctx context.Context, filter string) {
+			_, err := publicTranslator.Translate(ctx, filter)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).NotTo(ContainSubstring("owner-reference"))
+			Expect(err.Error()).NotTo(ContainSubstring("provider-id"))
+
+			_, err = privateTranslator.Translate(ctx, filter)
+			Expect(err).ToNot(HaveOccurred())
+		},
+		Entry("reserved label index", `this.metadata.labels['admin.osac.openshift.io/owner-reference'] == 'stored-value'`),
+		Entry("reserved provider label index", `this.metadata.labels['operator.admin.osac.openshift.io/provider-id'] != ''`),
+		Entry("reserved label membership", `'admin.osac.openshift.io/owner-reference' in this.metadata.labels`),
+	)
+
+	It("allows ordinary public metadata keys", func(ctx context.Context) {
+		_, err := publicTranslator.Translate(ctx, `this.metadata.labels['example.com/app'] == 'web'`)
+		Expect(err).ToNot(HaveOccurred())
+	})
+})
