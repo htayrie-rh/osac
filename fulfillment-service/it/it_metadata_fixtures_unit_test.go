@@ -75,11 +75,11 @@ var _ = Describe("Metadata fixture helper contracts", func() {
 		Expect(seen).To(HaveLen(26))
 	})
 
-	resourceEntries := make([]TableEntry, 0, len(metadataResourceServiceNames))
+	resourceEntries := make([]any, 0, len(metadataResourceServiceNames))
 	for _, name := range metadataResourceServiceNames {
 		resourceEntries = append(resourceEntries, Entry(name, name))
 	}
-	DescribeTable("exposes matching private and public metadata descriptors",
+	tableArgs := append([]any{
 		func(name string) {
 			services, err := metadataServices(name)
 			Expect(err).NotTo(HaveOccurred())
@@ -156,8 +156,8 @@ var _ = Describe("Metadata fixture helper contracts", func() {
 				Expect(paths.Kind()).To(Equal(protoreflect.StringKind))
 			}
 		},
-		resourceEntries...,
-	)
+	}, resourceEntries...)
+	DescribeTable("exposes matching private and public metadata descriptors", tableArgs...)
 
 	It("replaces only the requested metadata map", func() {
 		metadata := privatev1.Metadata_builder{
